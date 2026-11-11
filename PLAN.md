@@ -64,7 +64,7 @@ supera al aditivo y a la regresión cuantílica directa.
 
 ---
 
-## Fase 0 — Repo y CI
+## Fase 0 — Repo y CI  ✅ cerrada (2026-11-10)
 **Objetivo:** repo publicado con `main` protegida, datos fuera de git y CI corriendo.
 
 - [x] F0.1 `git init`. `PLAN.md`, `BITACORA.md`, `CLAUDE.md` y `.claude/` **se versionan**.
@@ -113,7 +113,7 @@ supera al aditivo y a la regresión cuantílica directa.
       al mergear, auto-merge.
 - [x] F0.13 Probar el flujo: rama `chore/…` → PR → CI verde → squash. Confirmar que `git push origin main` es rechazado.
 - [x] F0.14 **Versión de Airflow decidida: 3.3.2** (`apache/airflow:3.3.2-python3.11`, la misma del
-      Lab 1), LocalExecutor. Pendiente: anotarla en DECISIONES.md cuando exista (F2.7).
+      Lab 1), LocalExecutor. Anotada en DECISIONES.md §5.1.
 
 **Criterio de terminado:** clon limpio + `pytest` en verde en CI; `git log --all --name-only` sin datos ni credenciales.
 
@@ -415,4 +415,4 @@ observaciones de calidad" o en un rechazo con motivo.
 - **Diciembre 2026** (24/31-dic hasta 4.8× en licores) es el mayor riesgo de costo si se evalúa (F2.2).
 - **RAM del stack** ~3–4 GB pico con LocalExecutor; con Celery > 6 GB (F1.11).
 - **Checks requeridos progresivos**: agregar a la protección solo los jobs que ya existen.
-- **Protección de rama en repo privado** requiere GitHub Pro/Education; en público funciona siempre.
+- ~~Protección de rama en repo privado~~ → **resuelto**: el repo `pd-lab-2` es público y `main` quedó protegida (F0.12).
