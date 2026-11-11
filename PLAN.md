@@ -106,12 +106,12 @@ supera al aditivo y a la regresión cuantílica directa.
 - [x] F0.10 `.github/workflows/ci.yml` con job `lint-y-pruebas`: chequeo "sin datos ni credenciales
       versionados", ruff check + format, pytest con Postgres de servicio y `MLFLOW_TRACKING_URI`
       apuntando a un puerto cerrado. Plantilla de PR (`.github/pull_request_template.md`).
-- [ ] F0.11 Primer commit directo a `main` (única excepción) + `gh repo create pd-lab-2 --public --source . --push`.
+- [x] F0.11 Primer commit directo a `main` (única excepción) + `gh repo create pd-lab-2 --public --source . --push`.
       Auditar antes: `git ls-files` sin datos ni `.env`.
-- [ ] F0.12 Proteger `main`: check requerido `lint-y-pruebas`, `strict`, `enforce_admins`, historial
+- [x] F0.12 Proteger `main`: check requerido `lint-y-pruebas`, `strict`, `enforce_admins`, historial
       lineal, sin force push ni borrado. Repo: solo squash, título = PR, borrar rama
       al mergear, auto-merge.
-- [ ] F0.13 Probar el flujo: rama `chore/…` → PR → CI verde → squash. Confirmar que `git push origin main` es rechazado.
+- [x] F0.13 Probar el flujo: rama `chore/…` → PR → CI verde → squash. Confirmar que `git push origin main` es rechazado.
 - [x] F0.14 **Versión de Airflow decidida: 3.3.2** (`apache/airflow:3.3.2-python3.11`, la misma del
       Lab 1), LocalExecutor. Pendiente: anotarla en DECISIONES.md cuando exista (F2.7).
 
