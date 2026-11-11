@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Rechaza push a main. Única excepción: crear main en un remoto vacío (publicación inicial).
+set -euo pipefail
+
+cero="0000000000000000000000000000000000000000"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    if [ "$remote_sha" = "$cero" ] && ! git ls-remote --exit-code --heads "$1" main >/dev/null 2>&1; then
+      continue  # main aún no existe en el remoto: publicación inicial permitida
+    fi
+    echo "✗ Push a main rechazado: todo entra por PR (squash) con CI verde." >&2
+    exit 1
+  fi
+done

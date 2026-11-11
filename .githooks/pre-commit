@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Bloquea datos/credenciales en el commit y commits directos en main
+# (salvo el commit inicial del repo). Activar con: git config core.hooksPath .githooks
+set -euo pipefail
+
+rama=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+
+if [ "$rama" = "main" ] && git rev-parse --verify -q HEAD >/dev/null; then
+  echo "✗ No se hace commit directo en main. Crea una rama (feat/…, fix/…, chore/…) y abre un PR." >&2
+  exit 1
+fi
+
+prohibidos=$(git diff --cached --name-only --diff-filter=ACMR | grep -E \
+  '(^|/)data/|\.(csv|parquet|pkl|joblib|pdf|zip)$|(^|/)\.env$|(^|/)\.env\.' \
+  | grep -vE '(^|/)\.env\.example$' || true)
+
+if [ -n "$prohibidos" ]; then
+  echo "✗ Archivos prohibidos en el commit (datos o credenciales):" >&2
+  echo "$prohibidos" | sed 's/^/    /' >&2
+  echo "  Quítalos con: git restore --staged <archivo>" >&2
+  exit 1
+fi

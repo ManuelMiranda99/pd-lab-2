@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "novamercado"
+version = "0.1.0"
+description = "Servicio de ML en producción: venta esperada y cantidad sugerida por tienda y familia."
+requires-python = ">=3.11,<3.12"
+# Las dependencias se gestionan en requirements*.txt con versiones fijadas (==).
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "integracion: pruebas que necesitan Postgres (TEST_DATABASE_URL)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "api", "tests", "dags", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]

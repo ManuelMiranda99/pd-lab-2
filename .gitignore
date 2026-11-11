@@ -1,0 +1,48 @@
+# --- Datos: nunca en git (los publica el docente en el GES) ---
+/data/
+*.csv
+*.parquet
+*.pkl
+*.joblib
+*.pdf
+*.zip
+
+# --- Credenciales ---
+.env
+.env.*
+!.env.example
+
+# --- MLflow / Airflow / artefactos locales ---
+mlruns/
+mlartifacts/
+logs/
+cache_modelo/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# --- Sistema y editores ---
+.DS_Store
+.Rhistory
+.RData
+.Rproj.user/
+.idea/
+.vscode/
+*.swp
+*~
+
+# --- Claude Code: configuración local de la máquina ---
+.claude/settings.local.json
