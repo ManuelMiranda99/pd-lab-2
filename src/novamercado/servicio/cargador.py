@@ -62,6 +62,7 @@ class GestorModelo:
         self.poll_segundos = poll_segundos
         self._cargar = cargador
         self._actual: ModeloCargado | None = None
+        self._pendiente: str | None = None  # versión del alias que falló al instalarse
         self._detener = threading.Event()
         self._hilo: threading.Thread | None = None
         self._bloqueo = threading.Lock()
@@ -69,6 +70,14 @@ class GestorModelo:
     @property
     def actual(self) -> ModeloCargado | None:
         return self._actual
+
+    @property
+    def version_pendiente(self) -> str | None:
+        """Versión del alias que no se pudo instalar (el servicio sigue con la anterior)."""
+        actual = self._actual
+        if self._pendiente is None or (actual is not None and actual.version == self._pendiente):
+            return None
+        return self._pendiente
 
     # --- arranque y poller -------------------------------------------------------------------
 
@@ -134,8 +143,11 @@ class GestorModelo:
             return True  # aún no hay modelo con alias (el bootstrap lo creará)
         actual = self._actual
         if actual is not None and actual.version == version:
+            self._pendiente = None
             return True
-        return self._instalar(version)
+        instalado = self._instalar(version)
+        self._pendiente = None if instalado else version
+        return instalado
 
     def _instalar(self, version: str) -> bool:
         tmp = self.cache.carpeta_temporal()

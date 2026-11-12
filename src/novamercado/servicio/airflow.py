@@ -11,6 +11,20 @@ class AirflowNoDisponible(RuntimeError):
     """Airflow no respondió o rechazó la operación."""
 
 
+def _json(r: httpx.Response) -> dict:
+    """Cuerpo JSON (objeto) de una respuesta; si no lo es (Airflow arrancando, proxy), Airflow se
+    considera no disponible en vez de lanzar una excepción no controlada."""
+    try:
+        datos = r.json()
+    except ValueError as exc:
+        raise AirflowNoDisponible(
+            f"Airflow respondió algo que no es JSON ({r.status_code})"
+        ) from exc
+    if not isinstance(datos, dict):
+        raise AirflowNoDisponible(f"Airflow respondió un JSON inesperado ({r.status_code})")
+    return datos
+
+
 class AirflowClient:
     def __init__(
         self,
@@ -42,7 +56,10 @@ class AirflowClient:
             raise AirflowNoDisponible(f"Airflow no responde: {exc}") from exc
         if r.status_code not in (200, 201):
             raise AirflowNoDisponible(f"No se obtuvo token de Airflow ({r.status_code})")
-        return r.json()["access_token"]
+        token = _json(r).get("access_token")
+        if not isinstance(token, str) or not token:
+            raise AirflowNoDisponible("Airflow respondió sin token")
+        return token
 
     def _pedir(self, metodo: str, ruta: str, **kwargs) -> httpx.Response:
         for intento in range(2):
@@ -73,7 +90,10 @@ class AirflowClient:
             return False
         if r.status_code != 200:
             return False
-        datos = r.json()
+        try:
+            datos = _json(r)
+        except AirflowNoDisponible:
+            return False
         return all(
             (datos.get(c) or {}).get("status") == "healthy" for c in ("metadatabase", "scheduler")
         )
@@ -81,7 +101,7 @@ class AirflowClient:
     def dag_activo(self, dag_id: str) -> bool:
         """El DAG existe y no está pausado."""
         r = self._pedir("GET", f"/api/v2/dags/{dag_id}")
-        return r.status_code == 200 and not r.json().get("is_paused", True)
+        return r.status_code == 200 and not _json(r).get("is_paused", True)
 
     def disparar(self, dag_id: str, run_id: str) -> None:
         r = self._pedir(
@@ -101,4 +121,4 @@ class AirflowClient:
             return None
         if r.status_code != 200:
             raise AirflowNoDisponible(f"Airflow respondió {r.status_code}")
-        return r.json().get("state")
+        return _json(r).get("state")

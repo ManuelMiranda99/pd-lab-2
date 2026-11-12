@@ -26,7 +26,7 @@ from novamercado.db.esquema import migrar
 from novamercado.servicio.airflow import AirflowClient
 from novamercado.servicio.cache import CacheModelos
 from novamercado.servicio.cargador import GestorModelo
-from novamercado.servicio.registro import RegistroMlflow, mlflow_saludable
+from novamercado.servicio.registro import RegistroMlflow, RegistroNoDisponible, mlflow_saludable
 from novamercado.servicio.salud import MonitorSalud
 
 log = logging.getLogger("novamercado.api")
@@ -44,8 +44,8 @@ def _texto_validacion(exc: RequestValidationError) -> str:
 
 
 def registrar_manejadores(app: FastAPI) -> None:
-    """Todo error sale como `{"detail": "<texto>"}`: 422 para validación (nunca 400) y 503 si
-    la BD falla en cualquier endpoint (nunca 500)."""
+    """Todo error sale como `{"detail": "<texto>"}`: 422 para validación (nunca 400), 503 si
+    la BD falla en cualquier endpoint y 503 ante cualquier error inesperado (nunca 500)."""
 
     @app.exception_handler(RequestValidationError)
     async def _validacion(_: Request, exc: RequestValidationError) -> JSONResponse:
@@ -62,6 +62,15 @@ def registrar_manejadores(app: FastAPI) -> None:
         log.warning("Error de base de datos: %s", exc)
         return JSONResponse(status_code=503, content={"detail": "Base de datos no disponible"})
 
+    @app.exception_handler(Exception)
+    async def _inesperado(request: Request, exc: Exception) -> JSONResponse:
+        # Última red: ninguna entrada termina en 500. El error queda en el log para corregirlo.
+        log.exception("Error inesperado en %s %s", request.method, request.url.path)
+        return JSONResponse(
+            status_code=503,
+            content={"detail": f"Error interno inesperado ({type(exc).__name__}); reintente"},
+        )
+
 
 def _bd_ok(cfg: Config) -> bool:
     with conectar(cfg.db_url, timeout=3) as conn:
@@ -73,10 +82,22 @@ def _airflow_ok(cliente: AirflowClient, dag_id: str) -> bool:
     return cliente.salud() and cliente.dag_activo(dag_id)
 
 
+def _mlflow_ok(cfg: Config, registro: RegistroMlflow) -> bool:
+    """El servidor responde **y** el Registry (que vive en la BD del producto, §5.4) también."""
+    if not mlflow_saludable(cfg.mlflow_uri):
+        return False
+    try:
+        registro.version_con_alias(cfg.modelo_nombre, cfg.modelo_alias)
+    except RegistroNoDisponible:
+        return False
+    return True
+
+
 def construir_servicio(cfg: Config) -> Servicio:
     airflow = AirflowClient(cfg.airflow_url, cfg.airflow_usuario, cfg.airflow_password, timeout=3)
+    registro = RegistroMlflow(cfg.mlflow_uri)
     gestor = GestorModelo(
-        RegistroMlflow(cfg.mlflow_uri),
+        registro,
         CacheModelos(cfg.cache_dir),
         nombre=cfg.modelo_nombre,
         alias=cfg.modelo_alias,
@@ -85,7 +106,7 @@ def construir_servicio(cfg: Config) -> Servicio:
     monitor = MonitorSalud(
         {
             "base_de_datos": partial(_bd_ok, cfg),
-            "mlflow": partial(mlflow_saludable, cfg.mlflow_uri),
+            "mlflow": partial(_mlflow_ok, cfg, registro),
             "airflow": partial(_airflow_ok, airflow, cfg.dag_id),
         },
         intervalo=cfg.salud_segundos,

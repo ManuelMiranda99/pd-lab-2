@@ -70,10 +70,16 @@ def leer_panel(
 
 
 def leer_historia(conn: psycopg.Connection) -> pd.DataFrame:
-    """Todo el panel disponible (para entrenar): histórico ∪ observaciones."""
+    """Todo el panel disponible (para entrenar): histórico ∪ observaciones.
+
+    Defensa en profundidad: las observaciones posteriores a la cobertura de `feriados.csv` (la
+    API ya las rechaza) no entran al entrenamiento; una fecha absurda desplazaría el corte del
+    modelo y las ventanas de evaluación.
+    """
     fila = conn.execute(
         "SELECT GREATEST((SELECT max(fecha) FROM historico_ventas),"
-        " (SELECT max(fecha) FROM observaciones))"
+        " (SELECT max(fecha) FROM observaciones"
+        "   WHERE fecha <= COALESCE((SELECT max(fecha) FROM feriados), fecha)))"
     ).fetchone()
     conn.commit()
     if fila is None or fila[0] is None:

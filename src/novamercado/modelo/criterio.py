@@ -1,7 +1,8 @@
 """Criterio de reemplazo del modelo vigente (DECISIONES §4.2), como función pura.
 
 El retador se promueve solo si se cumplen **todas**:
-1. hay al menos `DIAS_MINIMOS` días evaluables después del corte del vigente;
+1. hay al menos `DIAS_MINIMOS` días evaluables después del corte del vigente (dos ventanas
+   completas de 7 días);
 2. `costo_retador ≤ costo_vigente × (1 − mejora_minima)` en el total de las ventanas;
 3. el retador gana en al menos la mitad de las ventanas;
 4. el retador cuesta menos que el baseline en esas mismas ventanas.
@@ -15,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 MEJORA_MINIMA = 0.005
-DIAS_MINIMOS = 7
+DIAS_MINIMOS = 14
 
 
 @dataclass(frozen=True)

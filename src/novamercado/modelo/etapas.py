@@ -43,6 +43,8 @@ class RegistroAlias(Protocol):
 
     def mover_alias(self, version: str) -> None: ...
 
+    def marcar_promovida(self, version: str) -> None: ...
+
 
 class AliasMlflow:
     """`RegistroAlias` sobre `MlflowClient` (alias `cfg.modelo_alias` de `cfg.modelo_nombre`)."""
@@ -72,6 +74,10 @@ class AliasMlflow:
         self._cliente().set_registered_model_alias(
             self.cfg.modelo_nombre, self.cfg.modelo_alias, version
         )
+
+    def marcar_promovida(self, version: str) -> None:
+        """Tag `promovido=True`: esta versión llegó a tener el alias (lo usa el bootstrap)."""
+        self._cliente().set_model_version_tag(self.cfg.modelo_nombre, version, "promovido", "True")
 
 
 _SIN_CONEXION = ("Max retries exceeded", "Connection refused", "NameResolutionError", "timed out")
@@ -205,6 +211,10 @@ def promover(
         registro.mover_alias(str(d["version_registrada"]))
         with conectar(cfg.db_url) as conn:
             repos.actualizar_detalle(conn, id_, {"alias_movido": True})
+        try:
+            registro.marcar_promovida(str(d["version_registrada"]))
+        except Exception:  # noqa: BLE001 — el alias ya se movió: el tag es solo auditoría
+            log.warning("No se pudo marcar como promovida la versión %s", d["version_registrada"])
     return {"alias_movido": True}
 
 

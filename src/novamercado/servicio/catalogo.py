@@ -31,6 +31,9 @@ def construir_catalogo(filas: repos.FilasCatalogo) -> Catalogo:
         familias=dict(filas.familias),
         fecha_inicio=filas.fecha_inicio,
         fecha_fin_cobertura=max(fin, filas.fecha_inicio),
+        fecha_fin_historico=filas.fecha_fin_historico,
+        max_ventas={(t, f): m for t, f, m in filas.max_ventas},
+        max_promocion=dict(filas.max_promocion),
     )
 
 

@@ -9,6 +9,7 @@ defensas:
 - ``NaN``/``Infinity`` y enteros gigantes se convierten en :class:`NoRepresentable` (nunca llegan
   a Postgres ni al modelo);
 - un objeto enviado como texto JSON se decodifica una vez más;
+- los surrogates UTF-16 sueltos se reemplazan por ``?`` (no se pueden codificar en UTF-8);
 - cuerpo vacío, JSON inválido, anidamiento excesivo o raíz que no es objeto → 422.
 """
 
@@ -79,6 +80,43 @@ def _decodificar(cuerpo: bytes) -> tuple[str, str | None]:
         return cuerpo.decode("cp1252", errors="replace"), "Latin-1/cp1252"
 
 
+def _texto_valido(texto: str) -> tuple[str, bool]:
+    """Reemplaza los surrogates UTF-16 sueltos (``"\\ud800"`` en JSON) por ``?``.
+
+    Python los acepta al decodificar el JSON, pero no se pueden codificar en UTF-8: llegarían a
+    la respuesta o a Postgres y romperían la serialización.
+    """
+    try:
+        texto.encode("utf-8")
+    except UnicodeEncodeError:
+        return texto.encode("utf-8", errors="replace").decode("utf-8"), True
+    return texto, False
+
+
+def sanear_textos(valor: Any) -> tuple[Any, bool]:
+    """Recorre el JSON decodificado y sanea claves y textos. Devuelve ``(valor, hubo_cambios)``."""
+    if isinstance(valor, str):
+        return _texto_valido(valor)
+    if isinstance(valor, list):
+        cambios = False
+        salida = []
+        for item in valor:
+            nuevo, cambio = sanear_textos(item)
+            salida.append(nuevo)
+            cambios |= cambio
+        return salida, cambios
+    if isinstance(valor, dict):
+        cambios = False
+        pares = []
+        for clave, item in parejas(valor):
+            clave_nueva, c1 = sanear_textos(clave)
+            nuevo, c2 = sanear_textos(item)
+            pares.append((clave_nueva, nuevo))
+            cambios |= c1 or c2
+        return (ObjetoJSON.desde_pares(pares), True) if cambios else (valor, False)
+    return valor, False
+
+
 def _cargar(texto: str) -> Any:
     return json.loads(
         texto,
@@ -123,6 +161,12 @@ def leer_cuerpo(cuerpo: bytes | str) -> CuerpoLeido:
         raise SolicitudRechazada("JSON_INVALIDO", "", motivo=type(exc).__name__) from None
     if not isinstance(datos, dict):
         raise SolicitudRechazada("RAIZ_NO_OBJETO", "", tipo=_tipo_json(datos))
+    try:
+        datos, saneado = sanear_textos(datos)
+    except RecursionError:
+        raise SolicitudRechazada("JSON_INVALIDO", "", motivo="RecursionError") from None
+    if saneado:
+        hallazgos.append(Hallazgo("TEXTO_INVALIDO", "cuerpo"))
     return CuerpoLeido(datos=datos, hallazgos=tuple(hallazgos))
 
 

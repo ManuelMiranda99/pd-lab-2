@@ -1,7 +1,9 @@
 """Validación temporal con origen móvil (DECISIONES §4.1), sin MLflow ni BD.
 
 - Ventanas: los días con dato posteriores al corte del vigente (los últimos `DIAS_MAX_EVALUACION`
-  como máximo), en bloques de `LARGO_VENTANA` días. Sin vigente, los últimos días de la historia.
+  como máximo), en bloques **completos** de `LARGO_VENTANA` días contados desde el final (el resto
+  más antiguo se descarta: una ventana de 1–6 días pesaría igual en el conteo de ventanas ganadas).
+  Sin vigente, los últimos días de la historia.
 - **Vigente:** se usa tal cual, sin reentrenar.
 - **Retador:** la receta se reentrena con datos anteriores al inicio de cada ventana, y su q_f se
   calibra fuera de muestra. **Baseline:** igual, con su propia receta (condición 4 de §4.2).
@@ -30,17 +32,35 @@ from novamercado.modelo.metricas import costo_total, metricas_tecnicas
 
 DIAS_MAX_EVALUACION = 21
 LARGO_VENTANA = 7
+#: Un día evaluable necesita al menos esta fracción de las filas del día más completo.
+FRACCION_DIA_COMPLETO = 0.5
 
 
 def ventanas_evaluacion(
     fechas: list[pd.Timestamp] | pd.Series, corte: pd.Timestamp | None
 ) -> list[list[pd.Timestamp]]:
-    """Días con dato `>= corte` (todos si no hay corte), los últimos 21, en bloques de 7."""
-    dias = sorted(pd.to_datetime(pd.Series(list(fechas))).drop_duplicates())
+    """Días con dato `>= corte` (todos si no hay corte), los últimos 21, en bloques completos de 7
+    contados desde el final (el resto más antiguo, de menos de 7 días, se descarta).
+
+    Si `fechas` trae una fila por (tienda, familia), solo cuentan los días **completos**: con al
+    menos la mitad de las filas del día más completo. Un día con una sola tienda observada no
+    pesa igual que uno con las diez en la regla de mayoría de ventanas (sí se usa para entrenar).
+    """
+    serie = pd.to_datetime(pd.Series(list(fechas)))
+    conteo = serie.value_counts()
+    if not conteo.empty:
+        conteo = conteo[conteo >= FRACCION_DIA_COMPLETO * conteo.max()]
+    dias = sorted(conteo.index)
     if corte is not None:
         dias = [d for d in dias if d >= corte]
     dias = dias[-DIAS_MAX_EVALUACION:]
+    dias = dias[len(dias) % LARGO_VENTANA :]
     return [dias[i : i + LARGO_VENTANA] for i in range(0, len(dias), LARGO_VENTANA)]
+
+
+def dias_evaluables(fechas: list[pd.Timestamp] | pd.Series, corte: pd.Timestamp | None) -> int:
+    """Días que entrarían en ventanas completas de evaluación después de `corte`."""
+    return sum(len(v) for v in ventanas_evaluacion(fechas, corte))
 
 
 def prediccion_rodante(

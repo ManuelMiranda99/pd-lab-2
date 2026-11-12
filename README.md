@@ -58,6 +58,10 @@ docker compose up
 `.env.example` funciona **sin editar** (sus valores son de desarrollo local, no credenciales reales).
 En Linux, si los logs de Airflow dan errores de permisos, pon en `.env` `AIRFLOW_UID=$(id -u)`.
 
+Opcional: para que cada run de MLflow registre el commit del código (las imágenes no llevan git),
+construye con `NOVAMERCADO_COMMIT=$(git rev-parse HEAD) docker compose up --build`. Sin la variable
+el commit queda como `desconocido` y todo lo demás funciona igual.
+
 `docker compose up` construye las imágenes la primera vez (unos minutos) y luego:
 
 1. `bootstrap` espera a MLflow, carga los CSV en la BD, entrena el modelo, lo registra en MLflow y

@@ -35,6 +35,10 @@ class AliasFalso:
             raise ConnectionError("MLflow no responde")
         self.version = version
         self.movimientos.append(version)
+        self.promovidas: list[str] = getattr(self, "promovidas", [])
+
+    def marcar_promovida(self, version: str) -> None:
+        self.promovidas = [*getattr(self, "promovidas", []), version]
 
 
 def _entrenador(promover: bool, *, registrada: str = "2", previa: str | None = "1"):

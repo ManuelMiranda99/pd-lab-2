@@ -16,17 +16,21 @@ from novamercado.servicio.salud import resumir
 router = APIRouter(tags=["salud"])
 
 
+# `async def`: solo leen memoria, así que corren en el event loop y responden aunque el pool de
+# hilos esté ocupado con predicciones (carga alta).
 @router.get("/health", response_model=Health, responses={503: {"model": Health}})
-def health(servicio: ServicioDep) -> JSONResponse:
+async def health(servicio: ServicioDep) -> JSONResponse:
     modelo = servicio.gestor.actual  # una sola lectura: coherente con el cuerpo
-    codigo, cuerpo = resumir(servicio.monitor.estado, modelo is not None)
+    codigo, cuerpo = resumir(
+        servicio.monitor.estado, modelo is not None, servicio.gestor.version_pendiente
+    )
     if modelo is not None:
         cuerpo["version_modelo"] = modelo.version
     return JSONResponse(status_code=codigo, content=Health(**cuerpo).model_dump(mode="json"))
 
 
 @router.get("/modelo", response_model=ModeloInfo, responses={503: {"model": ErrorRespuesta}})
-def modelo(servicio: ServicioDep) -> JSONResponse:
+async def modelo(servicio: ServicioDep) -> JSONResponse:
     actual = servicio.gestor.actual
     if actual is None:
         return JSONResponse(status_code=503, content={"detail": "Sin modelo cargado todavía"})

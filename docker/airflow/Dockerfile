@@ -16,3 +16,7 @@ RUN python -m venv /opt/venv-ml \
 
 USER airflow
 COPY --chown=airflow:root dags/ /opt/airflow/dags/
+# Linaje de código en MLflow (sin git en la imagen): `NOVAMERCADO_COMMIT=$(git rev-parse HEAD)
+# docker compose build`. Sin el argumento queda "desconocido" (DECISIONES §4.3).
+ARG NOVAMERCADO_COMMIT=desconocido
+ENV NOVAMERCADO_COMMIT=${NOVAMERCADO_COMMIT}

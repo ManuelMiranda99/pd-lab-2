@@ -25,12 +25,16 @@ from novamercado.servicio.salud import MonitorSalud
 class GestorFalso:
     def __init__(self, actual: ModeloCargado | None = None) -> None:
         self.actual = actual
+        self.version_pendiente: str | None = None
 
 
 def _airflow(estado_disparo: int = 200) -> AirflowClient:
     def manejar(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/auth/token":
             return httpx.Response(201, json={"access_token": "t"})
+        if request.url.path == "/api/v2/monitor/health":
+            sano = {"status": "healthy"}
+            return httpx.Response(200, json={"metadatabase": sano, "scheduler": sano})
         if request.method == "POST":
             return httpx.Response(estado_disparo, json={})
         if request.url.path == "/api/v2/dags/reentrenamiento":

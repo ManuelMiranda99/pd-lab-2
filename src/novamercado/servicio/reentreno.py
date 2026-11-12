@@ -151,6 +151,9 @@ def iniciar(
                 return Alta(actual.id, nuevo=False)
         if not mlflow_disponible:
             raise NoSePuedeIniciar("MLflow no disponible: no se puede reentrenar")
+        # Mismo criterio que /health: sin scheduler el dag run quedaría en cola sin avanzar.
+        if not airflow.salud():
+            raise NoSePuedeIniciar("Airflow no disponible (metadatabase o scheduler caídos)")
         try:
             activo = airflow.dag_activo(dag_id)
         except AirflowNoDisponible as exc:

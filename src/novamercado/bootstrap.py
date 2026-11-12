@@ -51,11 +51,15 @@ def asegurar_modelo(cfg: Config) -> str:
         if exc.error_code != "RESOURCE_DOES_NOT_EXIST":
             raise
     versiones = cliente.search_model_versions(f"name = '{cfg.modelo_nombre}'")
-    if versiones:
-        ultima = max(versiones, key=lambda v: int(v.version))
+    # Solo una versión que alguna vez fue promovida: la última registrada puede ser un retador
+    # que perdió (registros anteriores a que solo se registraran los promovidos).
+    promovidas = [v for v in versiones if (v.tags or {}).get("promovido") == "True"]
+    if promovidas:
+        ultima = max(promovidas, key=lambda v: int(v.version))
         cliente.set_registered_model_alias(cfg.modelo_nombre, cfg.modelo_alias, ultima.version)
         return (
-            f"alias {cfg.modelo_alias} asignado a la v{ultima.version} existente (sin reentrenar)"
+            f"alias {cfg.modelo_alias} asignado a la v{ultima.version} promovida antes "
+            "(sin reentrenar)"
         )
 
     from novamercado.modelo.ciclo import entrenar_y_registrar

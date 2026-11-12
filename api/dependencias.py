@@ -33,7 +33,8 @@ class Servicio:
             self.catalogo = ProveedorCatalogo(self.conectar)
 
 
-def obtener_servicio(request: Request) -> Servicio:
+async def obtener_servicio(request: Request) -> Servicio:
+    """`async`: una dependencia síncrona ocuparía un hilo del pool incluso en `/health`."""
     return request.app.state.servicio
 
 

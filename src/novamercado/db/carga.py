@@ -86,21 +86,55 @@ def _leer(ruta: Path) -> pd.DataFrame:
     return df.apply(lambda s: s.str.strip())
 
 
+#: Columnas que necesita el producto de cada archivo publicado (el resto se ignora).
+COLUMNAS_REQUERIDAS: dict[str, tuple[str, ...]] = {
+    "tiendas.csv": ("tienda_id", "nombre", "ciudad", "departamento", "tipo", "fecha_apertura"),
+    "familias.csv": ("familia_id", "nombre"),
+    "costos.csv": ("familia_id", "costo_faltante", "costo_sobrante"),
+    "feriados.csv": ("fecha", "nombre", "tipo", "ambito"),
+    "historico_ventas.csv": ("tienda_id", "fecha", "familia_id", "ventas", "en_promocion"),
+}
+
+
+def _leer_validado(archivos: dict[str, Path], nombre: str) -> pd.DataFrame:
+    """Lee un CSV y verifica sus columnas: un faltante es un error claro, no un `KeyError`."""
+    df = _leer(archivos[nombre])
+    faltan = [c for c in COLUMNAS_REQUERIDAS[nombre] if c not in df.columns]
+    if faltan:
+        raise ValueError(
+            f"{nombre}: faltan las columnas {', '.join(faltan)} "
+            f"(se encontraron: {', '.join(df.columns) or 'ninguna'})"
+        )
+    return df
+
+
 def leer_publicados(
     archivos: dict[str, Path], hasta: date | None = None
 ) -> dict[str, pd.DataFrame]:
-    """Lee y tipa los CSV publicados (el histórico, solo hasta `hasta` inclusive si se indica)."""
-    tiendas = _leer(archivos["tiendas.csv"])
+    """Lee y tipa los CSV publicados (el histórico, solo hasta `hasta` inclusive si se indica).
+
+    Lanza `ValueError` con un mensaje claro si falta una columna o un valor no se puede tipar.
+    """
+    try:
+        return _leer_y_tipar(archivos, hasta)
+    except (TypeError, ValueError) as exc:
+        if isinstance(exc, ValueError) and str(exc).split(":")[0] in COLUMNAS_REQUERIDAS:
+            raise
+        raise ValueError(f"Datos publicados con valores no válidos: {exc}") from exc
+
+
+def _leer_y_tipar(archivos: dict[str, Path], hasta: date | None) -> dict[str, pd.DataFrame]:
+    tiendas = _leer_validado(archivos, "tiendas.csv")
     tiendas["tienda_id"] = tiendas["tienda_id"].astype(int)
-    familias = _leer(archivos["familias.csv"])
+    familias = _leer_validado(archivos, "familias.csv")
     familias["familia_id"] = familias["familia_id"].str.lower()
-    costos = _leer(archivos["costos.csv"])
+    costos = _leer_validado(archivos, "costos.csv")
     costos["familia_id"] = costos["familia_id"].str.lower()
     costos[["costo_faltante", "costo_sobrante"]] = costos[
         ["costo_faltante", "costo_sobrante"]
     ].astype(float)
-    feriados = _leer(archivos["feriados.csv"])
-    historico = _leer(archivos["historico_ventas.csv"])
+    feriados = _leer_validado(archivos, "feriados.csv")
+    historico = _leer_validado(archivos, "historico_ventas.csv")
     historico["familia_id"] = historico["familia_id"].str.lower()
     historico["tienda_id"] = historico["tienda_id"].astype(int)
     historico["ventas"] = historico["ventas"].astype(float).round().astype(int)

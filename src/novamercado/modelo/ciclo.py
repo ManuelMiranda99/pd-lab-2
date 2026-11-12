@@ -25,9 +25,9 @@ from novamercado.db import repos
 from novamercado.db.conexion import conectar
 from novamercado.features.panel import leer_contexto, leer_historia
 from novamercado.modelo.baseline import ajustar_baseline
-from novamercado.modelo.criterio import Decision, decidir_reemplazo
+from novamercado.modelo.criterio import DIAS_MINIMOS, Decision, decidir_reemplazo
 from novamercado.modelo.hgb import DIAS_CALIBRACION, HIPERPARAMETROS, VIDA_MEDIA_DIAS, ModeloHGB
-from novamercado.modelo.validacion import entrenar_y_evaluar
+from novamercado.modelo.validacion import dias_evaluables, entrenar_y_evaluar
 
 log = logging.getLogger(__name__)
 
@@ -82,6 +82,46 @@ def cargar_vigente(cfg: Config) -> Vigente | None:
     return Vigente(modelo, str(mv.version), None if corte is None else pd.Timestamp(corte))
 
 
+def huella_entrenamiento(historia: pd.DataFrame) -> str:
+    """SHA-256 de las filas con las que se entrena (histórico ∪ observaciones), en orden estable.
+
+    `datos_sha256` identifica la carga inicial; esta huella cambia con cada observación nueva.
+    """
+    import hashlib
+
+    columnas = ["tienda_id", "fecha", "familia_id", "ventas", "en_promocion"]
+    ordenada = historia.loc[:, columnas].sort_values(columnas[:3]).reset_index(drop=True)
+    filas = pd.util.hash_pandas_object(ordenada, index=False).to_numpy()
+    return hashlib.sha256(filas.tobytes()).hexdigest()
+
+
+def _evaluacion_repetida(cfg: Config, huella: str, version_vigente: str) -> str | None:
+    """Motivo del run anterior si ya se evaluó un retador con estos mismos datos contra este mismo
+    vigente (el resultado sería el mismo). Ante cualquier error, None: se entrena."""
+    try:
+        from mlflow import MlflowClient
+
+        cliente = MlflowClient(tracking_uri=cfg.mlflow_uri, registry_uri=cfg.mlflow_uri)
+        experimento = cliente.get_experiment_by_name(cfg.experimento)
+        if experimento is None:
+            return None
+        runs = cliente.search_runs(
+            [experimento.experiment_id],
+            filter_string=(
+                f"params.datos_entrenamiento_sha256 = '{huella}' and "
+                f"params.version_vigente = '{version_vigente}' and tags.rol = 'retador' and "
+                "attributes.status = 'FINISHED'"
+            ),
+            max_results=1,
+        )
+    except Exception:  # noqa: BLE001
+        log.warning("No se pudo buscar evaluaciones anteriores; se entrena", exc_info=True)
+        return None
+    if not runs:
+        return None
+    return f"run {runs[0].info.run_id[:8]}"
+
+
 def _metricas_por_familia(prefijo: str, valores: dict[str, float]) -> dict[str, float]:
     return {f"{prefijo}_{f}": float(v) for f, v in sorted(valores.items())}
 
@@ -91,10 +131,14 @@ def entrenar_y_registrar(
 ) -> Resultado:
     """Entrena el retador, lo evalúa contra vigente y baseline (§4) y lo registra con su linaje.
 
-    Orden: registrar la versión → mover el alias solo si la decisión lo permite (y si
-    `mover_alias`). Sin vigente y con un retador que no mejora al baseline, se registra y
-    promueve el baseline (el servicio necesita un modelo). Cualquier excepción sale antes de
-    tocar el alias.
+    - Si el vigente no tiene días nuevos suficientes para evaluar (condición 1 de §4.2), no se
+      entrena: el resultado ya se sabe y se ahorra el tiempo de entrenamiento.
+    - Cada ejecución deja sus runs en MLflow (evidencia), pero **solo el modelo promovido se
+      registra** como versión del Registry: los perdedores no llenan el Registry.
+    - Orden: registrar la versión → mover el alias solo si la decisión lo permite (y si
+      `mover_alias`). Sin vigente y con un retador que no mejora al baseline, se registra y
+      promueve el baseline (el servicio necesita un modelo). Cualquier excepción sale antes de
+      tocar el alias.
     """
     import mlflow
     from mlflow import MlflowClient
@@ -112,7 +156,49 @@ def entrenar_y_registrar(
     if historia.empty:
         raise RuntimeError("No hay datos para entrenar (¿falta la carga inicial?)")
 
+    huella = huella_entrenamiento(historia)
     vigente = cargar_vigente(cfg) if comparar else None
+    fin_historia = historia["fecha"].max() + pd.Timedelta(days=1)
+    if vigente is not None and vigente.corte is not None and vigente.corte > fin_historia:
+        # Corte posterior a los datos (modelo entrenado con una fecha absurda que hoy se excluye):
+        # se trata como desconocido para no congelar el reentrenamiento para siempre.
+        log.warning("El corte del vigente (%s) es posterior a los datos; se ignora", vigente.corte)
+        vigente.corte = None
+    if vigente is not None and vigente.corte is not None:
+        dias = dias_evaluables(historia["fecha"], vigente.corte)
+        if dias < DIAS_MINIMOS:
+            motivo = (
+                f"Solo {dias} días evaluables después del corte del vigente "
+                f"(mínimo {DIAS_MINIMOS}): se conserva el vigente sin entrenar"
+            )
+            log.info(motivo)
+            return Resultado(
+                promovido=False,
+                version=vigente.version,
+                version_registrada=None,
+                version_previa=vigente.version,
+                motivo=motivo,
+                detalle={
+                    "dias_evaluables": dias,
+                    "segundos": round(time.perf_counter() - t0, 1),
+                },
+            )
+    if vigente is not None:
+        repetido = _evaluacion_repetida(cfg, huella, vigente.version)
+        if repetido is not None:
+            motivo = (
+                f"Sin datos nuevos desde el reentreno anterior contra la v{vigente.version} "
+                f"(misma huella de datos): se conserva el vigente sin entrenar ({repetido})"
+            )
+            log.info(motivo)
+            return Resultado(
+                promovido=False,
+                version=vigente.version,
+                version_registrada=None,
+                version_previa=vigente.version,
+                motivo=motivo,
+                detalle={"datos_entrenamiento_sha256": huella},
+            )
     res = entrenar_y_evaluar(
         historia,
         ctx,
@@ -134,6 +220,7 @@ def entrenar_y_registrar(
     linaje = {
         "id_reentreno": id_texto,
         "datos_sha256": sha or "",
+        "datos_entrenamiento_sha256": huella,
         "fecha_min": str(historia["fecha"].min().date()),
         "fecha_max": str(historia["fecha"].max().date()),
         "filas": len(historia),
@@ -186,17 +273,23 @@ def entrenar_y_registrar(
             python_model=ModeloNovaMercado(final),
             code_paths=[str(RUTA_PAQUETE)],
             pip_requirements=REQUISITOS_PIP,
-            registered_model_name=cfg.modelo_nombre,
         )
-        version = str(info.registered_model_version)
-        log.info("Run %s: versión registrada %s (%s)", run.info.run_id, version, decision.motivo)
+        version: str | None = None
+        if decision.promover:
+            mv = mlflow.register_model(info.model_uri, cfg.modelo_nombre)
+            version = str(mv.version)
+            mlflow.set_tag("version_registrada", version)
+        log.info(
+            "Run %s: versión registrada %s (%s)", run.info.run_id, version or "—", decision.motivo
+        )
 
     cliente = MlflowClient(tracking_uri=cfg.mlflow_uri, registry_uri=cfg.mlflow_uri)
-    cliente.set_model_version_tag(cfg.modelo_nombre, version, "promovido", str(decision.promover))
     version_previa = vigente.version if vigente else None
     version_vigente = version_previa
-    if decision.promover and mover_alias:
+    if decision.promover and mover_alias and version is not None:
         cliente.set_registered_model_alias(cfg.modelo_nombre, cfg.modelo_alias, version)
+        # `promovido=True` solo cuando el alias ya se movió (en el DAG lo marca `etapas.promover`).
+        cliente.set_model_version_tag(cfg.modelo_nombre, version, "promovido", "True")
         version_vigente = version
     return Resultado(
         promovido=decision.promover,

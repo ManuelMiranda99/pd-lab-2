@@ -33,6 +33,9 @@ class AirflowFalso:
         ruta = request.url.path
         if ruta == "/auth/token":
             return httpx.Response(201, json={"access_token": "t"})
+        if ruta == "/api/v2/monitor/health":
+            sano = {"status": "healthy"}
+            return httpx.Response(200, json={"metadatabase": sano, "scheduler": sano})
         if request.method == "POST":
             self.disparos.append(request.read().decode())
             return httpx.Response(200, json={})

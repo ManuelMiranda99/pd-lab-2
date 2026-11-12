@@ -31,6 +31,9 @@ class BaselineDiaSemana:
     respaldo: dict[str, float] = field(default_factory=dict)  # "tienda|familia" → media
     respaldo_familia: dict[str, float] = field(default_factory=dict)
     nombre: str = "baseline_dia_semana"
+    #: Primer día que no vio al entrenar (como `ModeloHGB.fecha_corte`): así, si el baseline es
+    #: el vigente, se compara solo en días nuevos. None en modelos guardados antes de este campo.
+    fecha_corte: pd.Timestamp | None = None
 
     def predecir(self, solicitud: pd.DataFrame, panel: pd.DataFrame) -> pd.DataFrame:
         """Predice cada fila de `solicitud` usando solo filas de `panel` anteriores a su fecha."""
@@ -116,8 +119,9 @@ def ajustar_baseline(
     """
     datos = historia if antes_de is None else historia[historia["fecha"] < antes_de]
     if datos.empty:
-        return BaselineDiaSemana(k=k)
+        return BaselineDiaSemana(k=k, fecha_corte=antes_de)
     ultimo = datos["fecha"].max()
+    corte = pd.Timestamp(ultimo) + pd.Timedelta(days=1)
     reciente = datos[datos["fecha"] > ultimo - pd.Timedelta(days=28)]
     por_par = reciente.groupby(["tienda_id", "familia_id"])["ventas"].mean()
     respaldo = {f"{t}|{f}": float(v) for (t, f), v in por_par.items()}
@@ -136,5 +140,9 @@ def ajustar_baseline(
             ratio = grupo["ventas"] / grupo["venta_esperada"]
             factores[familia] = float(np.clip(ratio.quantile(tau), FACTOR_MIN, FACTOR_MAX))
     return BaselineDiaSemana(
-        k=k, factores=factores, respaldo=respaldo, respaldo_familia=respaldo_familia
+        k=k,
+        factores=factores,
+        respaldo=respaldo,
+        respaldo_familia=respaldo_familia,
+        fecha_corte=corte,
     )
