@@ -245,10 +245,11 @@ Toda la fase en una pasada, en la rama `feat/modelo-ml` → PR #9 (squash, CI ve
 
 ## Sesión 2026-11-11 — Fase 6 (inicio)
 **Fase:** 6 — Reentrenamiento, hot-reload y resiliencia (endurecimiento)
-**Estado al cerrar:** Fase 6 en 7 de 8 · solo falta sumar el job `dags` a los checks requeridos
+**Estado al cerrar:** Fase 6 cerrada ✅ (8 de 8)
 **Plan del día:** toda la fase (F6.1–F6.8), tras completar la entrada de la Fase 5
 
-Toda la fase en una pasada, en la rama `feat/reentrenamiento` (sin commit todavía).
+Toda la fase en una pasada, en la rama `feat/reentrenamiento` → PR #10 (squash, CI verde con
+`lint-y-pruebas`, `compose` y `dags`). `dags` quedó como check requerido de `main`.
 
 ### Logrado
 - F6.1/F6.2 `modelo/etapas.py` + DAG de cinco tareas: `verificar` → `entrenar` (registra sin
@@ -278,13 +279,11 @@ Toda la fase en una pasada, en la rama `feat/reentrenamiento` (sin commit todav�
   estados y vencimiento → DECISIONES.md.
 
 ### Pendientes / bloqueos
-- Sumar `dags` a los checks requeridos de `main` cuando el PR lo haya corrido (cambio de
-  configuración del repo: con permiso).
 - El volumen local tiene 14 días de observaciones de prueba (2026-03-01…14, choque +25 %) y v7
   entrenada con ellas. No afecta un clon limpio; para un ensayo limpio local hay que recrear los
   volúmenes (nunca durante la evaluación).
 - Opcional no hecho: aviso del DAG a la API para recargar (el poller de 20 s ya cumple ≤ 2 min).
 
 ### Próxima sesión
-- Empezar por: PR de la Fase 6 → check `dags` requerido → **Fase 7**: F7.1 `scripts/smoke.py`
+- Empezar por: **Fase 7** — F7.1 `scripts/smoke.py`
   (puede reutilizar el envío de solicitudes/observaciones usado hoy) y F7.3 simulador sin fuga.
