@@ -155,10 +155,12 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'smoke')
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    env:
-      DATOS_DIR: ${{ runner.temp }}/datos-sinteticos
     steps:
       - uses: actions/checkout@v5
+
+      # `runner.temp` no existe en el `env` del job: la ruta se exporta desde un paso.
+      - name: Carpeta de datos
+        run: echo "DATOS_DIR=$RUNNER_TEMP/datos-sinteticos" >> "$GITHUB_ENV"
 
       - uses: actions/setup-python@v6
         with:
