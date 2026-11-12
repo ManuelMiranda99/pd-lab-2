@@ -46,3 +46,6 @@ htmlcov/
 
 # --- Claude Code: configuración local de la máquina ---
 .claude/settings.local.json
+
+# Worktrees de agentes de Claude Code
+.claude/worktrees/
