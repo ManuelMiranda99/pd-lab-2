@@ -2,3 +2,5 @@
 -r requirements.txt
 pytest==9.2.0
 ruff==0.17.4
+# Gráficas del EDA (scripts/eda.py); no se usa en el servicio ni en el entrenamiento.
+matplotlib==3.11.2

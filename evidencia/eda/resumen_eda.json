@@ -1,0 +1,246 @@
+{
+  "estructura": {
+    "inicio": "2024-03-01",
+    "fin": "2026-02-28",
+    "dias": 730,
+    "filas": 83052,
+    "duplicados": 0,
+    "huecos": 0,
+    "familias_en_todas_las_tiendas": true,
+    "en_promocion_min": 0,
+    "en_promocion_max": 19,
+    "ventas_negativas": 0,
+    "filas_por_tienda": {
+      "1": 8760,
+      "2": 8760,
+      "3": 8760,
+      "4": 8760,
+      "5": 8760,
+      "6": 8760,
+      "7": 8760,
+      "8": 8760,
+      "9": 8760,
+      "10": 4212
+    }
+  },
+  "cierres": {
+    "7": {
+      "desde": "2024-09-09",
+      "hasta": "2024-09-15",
+      "dias": 7
+    }
+  },
+  "tienda_10": {
+    "apertura": "2025-03-15",
+    "primer_dato": "2025-03-15",
+    "dias": 351,
+    "media_primera_semana": 463.7,
+    "media_julio_2025": 868.3,
+    "media_ultimas_4_semanas": 884.7,
+    "media_otras_express_ultimas_4_semanas": 856.1
+  },
+  "baseline_wape_por_tienda_ultimo_anio": {
+    "1": 0.231,
+    "2": 0.235,
+    "3": 0.233,
+    "4": 0.245,
+    "5": 0.236,
+    "6": 0.237,
+    "7": 0.234,
+    "8": 0.231,
+    "9": 0.254,
+    "10": 0.249
+  },
+  "ceros": {
+    "filas_cero_sin_cierres": 55,
+    "top_tasa_ceros": {
+      "4/mascotas": 0.034,
+      "10/mascotas": 0.017,
+      "9/bebe": 0.015,
+      "9/mascotas": 0.012,
+      "10/bebe": 0.006,
+      "4/bebe": 0.003
+    }
+  },
+  "feriados": {
+    "inicio": "2024-03-28",
+    "fin": "2026-12-31",
+    "filas": 61,
+    "filas_posteriores_al_historico": 19,
+    "tipos": {
+      "feriado": 38,
+      "comercial": 11,
+      "pago": 6,
+      "medio_dia": 6
+    },
+    "ambitos_locales": [
+      "Antigua Guatemala",
+      "Cobán",
+      "Guatemala"
+    ],
+    "ciudades_tiendas": [
+      "Antigua Guatemala",
+      "Chimaltenango",
+      "Cobán",
+      "Escuintla",
+      "Guatemala",
+      "Mixco",
+      "Quetzaltenango",
+      "Villa Nueva"
+    ]
+  },
+  "dias_especiales": {
+    "1_ene": 0.376,
+    "24_dic": 1.959,
+    "25_dic": 0.445,
+    "31_dic": 2.32,
+    "26_30_dic": 1.267,
+    "31_oct": 1.251,
+    "semana_santa_jue_vie_sab": [
+      0.953,
+      0.893,
+      0.937,
+      1.066,
+      0.903,
+      0.925,
+      NaN,
+      NaN,
+      NaN
+    ],
+    "24_dic_por_familia": {
+      "licores": 4.32,
+      "carnes": 3.14,
+      "bebidas": 2.55,
+      "panaderia": 2.01,
+      "snacks": 1.96,
+      "abarrotes": 1.62,
+      "bebe": 1.56,
+      "limpieza": 1.53,
+      "cuidado_personal": 1.5,
+      "frutas_verduras": 1.45,
+      "lacteos": 1.44,
+      "mascotas": 1.38
+    },
+    "31_dic_por_familia": {
+      "licores": 5.41,
+      "carnes": 3.92,
+      "bebidas": 2.83,
+      "snacks": 2.11,
+      "abarrotes": 2.08,
+      "panaderia": 2.08,
+      "lacteos": 1.89,
+      "limpieza": 1.83,
+      "frutas_verduras": 1.77,
+      "mascotas": 1.75,
+      "cuidado_personal": 1.62,
+      "bebe": 1.61
+    },
+    "nacionales": {
+      "Año Nuevo (feriado)": 0.376,
+      "Día de Todos los Santos (feriado)": 1.133,
+      "Día de la Independencia (feriado)": 1.104,
+      "Día de la Madre (comercial)": 1.068,
+      "Día de la Revolución (feriado)": 1.003,
+      "Día del Cariño (comercial)": 1.018,
+      "Día del Ejército (feriado)": 1.101,
+      "Día del Padre (comercial)": 1.033,
+      "Día del Trabajo (feriado)": 1.09,
+      "Fin de año (medio día) (medio_dia)": 2.32,
+      "Jueves Santo (feriado)": 1.01,
+      "Navidad (feriado)": 0.445,
+      "Nochebuena (medio día) (medio_dia)": 1.959,
+      "Pago del Bono 14 (pago)": 1.23,
+      "Pago del aguinaldo (pago)": 1.266,
+      "Sábado Santo (feriado)": 0.931,
+      "Viernes Negro (comercial)": 1.127,
+      "Viernes Santo (feriado)": 0.898
+    }
+  },
+  "dia_de_mes": {
+    "dia_15": 1.181,
+    "dia_16": 1.137,
+    "ultimo_dia": 1.186,
+    "penultimo_dia": 0.983,
+    "dia_1": 1.134,
+    "resto_mediana": 0.991
+  },
+  "mes_y_tendencia": {
+    "tendencia_anual_log": 0.0611,
+    "crecimiento_interanual": 1.067,
+    "crecimiento_interanual_por_tipo": {
+      "express": 1.056,
+      "hipermercado": 1.071,
+      "supermercado": 1.062
+    },
+    "factor_mes": {
+      "1": 0.907,
+      "2": 0.993,
+      "3": 1.017,
+      "4": 1.012,
+      "5": 0.999,
+      "6": 0.978,
+      "7": 1.043,
+      "8": 0.973,
+      "9": 0.966,
+      "10": 0.977,
+      "11": 0.984,
+      "12": 1.187
+    }
+  },
+  "feriados_locales": {
+    "Santiago Apóstol (Antigua Guatemala, tiendas [6])": {
+      "factor_ciudad": 0.916,
+      "factor_resto": 0.953
+    },
+    "Santo Domingo de Guzmán (Cobán, tiendas [8])": {
+      "factor_ciudad": 0.995,
+      "factor_resto": 0.973
+    },
+    "Virgen de la Asunción (Guatemala, tiendas [1, 4, 10])": {
+      "factor_ciudad": 0.908,
+      "factor_resto": 1.185
+    }
+  },
+  "promocion": {
+    "pendiente_log_por_producto": {
+      "abarrotes": 0.0226,
+      "lacteos": 0.0289,
+      "panaderia": 0.0308,
+      "frutas_verduras": 0.0311,
+      "bebidas": 0.0332,
+      "snacks": 0.0368,
+      "cuidado_personal": 0.038,
+      "limpieza": 0.0408,
+      "mascotas": 0.0482,
+      "carnes": 0.0525,
+      "bebe": 0.0582,
+      "licores": 0.0646
+    },
+    "residuo_log_por_tramo": {
+      "0": -0.0586,
+      "1-2": 0.0438,
+      "3-5": 0.0837,
+      "6-9": 0.1056,
+      "10+": 0.1137
+    },
+    "filas_con_promocion": 0.435,
+    "en_promocion_p50_p90": [
+      0.0,
+      6.0
+    ]
+  },
+  "tau_newsvendor": {
+    "abarrotes": 0.833,
+    "bebidas": 0.833,
+    "lacteos": 0.455,
+    "carnes": 0.429,
+    "panaderia": 0.286,
+    "frutas_verduras": 0.333,
+    "limpieza": 0.909,
+    "cuidado_personal": 0.909,
+    "licores": 0.952,
+    "snacks": 0.769,
+    "bebe": 0.882,
+    "mascotas": 0.833
+  }
+}
