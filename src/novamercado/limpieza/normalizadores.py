@@ -83,7 +83,16 @@ ALIAS_PREDICCION: dict[str, frozenset[str]] = {
         }
     ),
     "familias": frozenset(
-        {"familias", "familia", "items", "detalle", "productos", "promociones", "lineas"}
+        {
+            "familias",
+            "familia",
+            "families",
+            "items",
+            "detalle",
+            "productos",
+            "promociones",
+            "lineas",
+        }
     ),
 }
 ALIAS_OBSERVACIONES: dict[str, frozenset[str]] = {
@@ -113,6 +122,7 @@ _ALIAS_FAMILIA = frozenset(
         "categoria",
         "categoria_id",
         "nombre_familia",
+        "nombre",
     }
 )
 ALIAS_ITEM_PREDICCION: dict[str, frozenset[str]] = {
@@ -193,7 +203,7 @@ def resolver_claves(
 # Números
 # ---------------------------------------------------------------------------------------------
 
-EstadoNumero = Literal["ok", "reparado", "decimal", "invalido", "faltante"]
+EstadoNumero = Literal["ok", "reparado", "decimal", "ambiguo", "invalido", "faltante"]
 
 _SIGNO = r"[+-]?"
 _PATRONES_NUMERO: tuple[tuple[re.Pattern[str], str, str], ...] = (
@@ -208,6 +218,9 @@ _PATRONES_NUMERO: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (re.compile(rf"{_SIGNO}(\d+\.\d*|\.\d+)([eE]{_SIGNO}\d+)?"), "", ""),
     (re.compile(rf"{_SIGNO}\d+[eE]{_SIGNO}\d+"), "", ""),
 )
+#: ``"1.000"``: punto decimal o separador de miles (en Guatemala se usan ambos). Ambiguo.
+_PUNTO_AMBIGUO = re.compile(rf"{_SIGNO}\d{{1,3}}\.\d{{3}}")
+_EXPONENTE = re.compile(r"\d\s*[eE]\s*[+-]?\d")
 
 
 @dataclass(frozen=True)
@@ -216,6 +229,7 @@ class Numero:
 
     - ``ok``: entero JSON sin cambios; ``reparado``: entero obtenido sin pérdida;
     - ``decimal``: número con parte fraccionaria (``valor`` es ``Decimal``);
+    - ``ambiguo``: texto como ``"1.000"`` (``valor`` es la lectura con punto decimal);
     - ``invalido``: no representable (``motivo`` lo explica); ``faltante``: ``null``/ausente.
     """
 
@@ -243,9 +257,10 @@ def interpretar_numero(valor: Any) -> Numero:
     """Interpreta un número recibido como JSON o como texto, sin conversiones con pérdida.
 
     Acepta ``"3"``, ``2.0``, ``"1,234"`` (miles), ``"812,0"`` (coma decimal), ``"1.234.567"``,
-    ``"1 234"``, ``"1e3"`` y dígitos de ancho completo. ``"1.234"`` se lee como decimal (punto
-    decimal JSON). Los booleanos, listas, objetos, ``NaN``/``Infinity`` y enteros que no caben en
-    un ``integer`` de PostgreSQL son inválidos.
+    ``"1 234"``, ``"1e3"`` y dígitos de ancho completo. ``"1.234"`` (un solo punto y tres
+    decimales) es ``ambiguo``: puede ser decimal o separador de miles. Los booleanos, listas,
+    objetos, ``NaN``/``Infinity`` y enteros que no caben en un ``integer`` de PostgreSQL son
+    inválidos.
     """
     if valor is None:
         return Numero("faltante", motivo="nulo")
@@ -266,6 +281,8 @@ def interpretar_numero(valor: Any) -> Numero:
         texto = texto.replace("'", "").replace("_", "")
         if not texto:
             return Numero("faltante", motivo="texto vacío")
+        if _PUNTO_AMBIGUO.fullmatch(texto):
+            return Numero("ambiguo", Decimal(texto), motivo="punto decimal o de miles")
         for patron, miles, coma in _PATRONES_NUMERO:
             if patron.fullmatch(texto):
                 limpio = texto.replace(miles, "") if miles else texto
@@ -282,7 +299,7 @@ def interpretar_numero(valor: Any) -> Numero:
 # Tienda
 # ---------------------------------------------------------------------------------------------
 
-_PATRON_TIENDA = re.compile(r"(?:t|tda|tienda|store|sucursal|no|num|n)?_?0*(\d{1,9})(?:_0+)?")
+_PATRON_TIENDA = re.compile(r"(?:t|tda|tienda|store|sucursal|no|num|n)?_?0*(\d{1,9})")
 
 
 def normalizar_tienda(
@@ -304,8 +321,10 @@ def normalizar_tienda(
         forma = forma_canonica(valor)
         num = interpretar_numero(valor)
         coincidencia = _PATRON_TIENDA.fullmatch(forma)
-        if num.estado in ("ok", "reparado", "decimal"):
-            tienda_id = num.valor if num.estado != "decimal" else None  # type: ignore[assignment]
+        if _EXPONENTE.search(valor):
+            tienda_id = None  # "1e1": no es una lectura inequívoca de un id
+        elif num.estado in ("ok", "reparado", "decimal", "ambiguo"):
+            tienda_id = num.valor if num.estado in ("ok", "reparado") else None  # type: ignore[assignment]
         elif coincidencia:
             tienda_id = int(coincidencia.group(1))
         else:
@@ -334,7 +353,8 @@ def normalizar_tienda(
 _ISO = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
 _ISO_FLEXIBLE = re.compile(r"(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})")
 _ISO_CON_HORA = re.compile(
-    r"(\d{4})-(\d{1,2})-(\d{1,2})[T ]\d{1,2}:\d{2}(:\d{2}(\.\d+)?)?\s*(Z|[+-]\d{2}:?\d{2})?",
+    r"(\d{4})-(\d{1,2})-(\d{1,2})[T ](\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?"
+    r"\s*(Z|[+-]\d{2}:?\d{2})?",
     re.IGNORECASE,
 )
 _COMPACTA = re.compile(r"(\d{4})(\d{2})(\d{2})")
@@ -348,13 +368,21 @@ def _construir(anio: str, mes: str, dia: str) -> date | None:
         return None
 
 
-def interpretar_fecha(valor: Any) -> tuple[date, Literal["ok", "reparado", "ambigua"]]:
+TipoFecha = Literal["ok", "reparado", "ambigua", "zona"]
+
+
+def _hora_valida(hora: str, minuto: str, segundo: str | None) -> bool:
+    return int(hora) <= 23 and int(minuto) <= 59 and (segundo is None or int(segundo) <= 59)
+
+
+def interpretar_fecha(valor: Any) -> tuple[date, TipoFecha]:
     """Interpreta una fecha sin reloj del sistema; lanza ``ValueError`` si es ilegible.
 
     Formatos: ``AAAA-MM-DD`` (ok); con hora o zona, ``AAAA/MM/DD``, ``AAAA.MM.DD``,
     ``AAAAMMDD`` (texto o entero), ``DD/MM/AAAA`` (reparado); ``D/M/AAAA`` con ambos ≤ 12 y
     distintos → ``ambigua`` (se interpreta día/mes). Si el primer número es ≤ 12 y el segundo
-    > 12, la única lectura posible es mes/día (reparado).
+    > 12, la única lectura posible es mes/día (reparado). Una hora imposible (``T25:00``) es
+    ilegible; con zona horaria (``Z`` o ``±HH:MM``) se usa el día escrito → ``zona``.
     """
     if isinstance(valor, bool):
         raise ValueError("booleano")
@@ -367,7 +395,18 @@ def interpretar_fecha(valor: Any) -> tuple[date, Literal["ok", "reparado", "ambi
         d = _construir(*m.groups())
         if d is not None:
             return d, "ok" if texto == valor else "reparado"
-    for patron in (_ISO_CON_HORA, _ISO_FLEXIBLE, _COMPACTA):
+    if m := _ISO_CON_HORA.fullmatch(texto):
+        anio, mes, dia, hora, minuto, segundo, zona = m.groups()
+        d = _construir(anio, mes, dia)
+        if d is None or not _hora_valida(hora, minuto, segundo):
+            raise ValueError("fecha u hora imposible")
+        medianoche = int(hora) == 0 and int(minuto) == 0 and int(segundo or 0) == 0
+        utc = zona is not None and zona.upper() in ("Z", "+00:00", "+0000", "-00:00")
+        local = zona in ("-06:00", "-0600")  # hora de Guatemala: el día escrito es el local
+        # Medianoche UTC es la forma habitual de serializar "solo el día": inequívoca.
+        inequivoca = zona is None or local or (medianoche and utc)
+        return d, "reparado" if inequivoca else "zona"
+    for patron in (_ISO_FLEXIBLE, _COMPACTA):
         if m := patron.fullmatch(texto):
             d = _construir(*m.groups()[:3])
             if d is None:
@@ -390,25 +429,36 @@ def interpretar_fecha(valor: Any) -> tuple[date, Literal["ok", "reparado", "ambi
 
 
 def normalizar_fecha(
-    valor: Any, catalogo: Catalogo, tienda_id: int, campo: str = "fecha"
+    valor: Any,
+    catalogo: Catalogo,
+    tienda_id: int,
+    campo: str = "fecha",
+    tipo: Literal["prediccion", "observaciones"] = "prediccion",
 ) -> tuple[date, list[Hallazgo]]:
     """Normaliza la fecha y la valida contra el rango derivado de los datos.
 
     - antes del inicio del histórico o de la apertura de la tienda → rechazo;
-    - después de la cobertura de ``feriados.csv`` → advertencia;
-    - fechas pasadas dentro del histórico se aceptan (el servicio opera en fechas simuladas).
+    - después de la cobertura de ``feriados.csv`` → advertencia (predicción) o rechazo
+      (observación: no hay ventas reales fuera del periodo de operación);
+    - ambigua D/M → advertencia (predicción) o rechazo (observación: no se adivina el día);
+    - fechas pasadas dentro del histórico se aceptan (el servicio opera en fechas simuladas); una
+      observación de esas fechas reemplaza al dato publicado y se advierte.
     """
     if valor is None or (isinstance(valor, str) and not valor.strip()):
         raise SolicitudRechazada("FECHA_FALTANTE", campo)
     try:
-        fecha, tipo = interpretar_fecha(valor)
+        fecha, formato = interpretar_fecha(valor)
     except ValueError:
         raise SolicitudRechazada("FECHA_ILEGIBLE", campo, recibido=mostrar(valor)) from None
     hallazgos: list[Hallazgo] = []
     datos = {"recibido": mostrar(valor), "fecha": fecha.isoformat()}
-    if tipo == "reparado":
+    if formato == "reparado":
         hallazgos.append(Hallazgo("FECHA_FORMATO", campo, datos))
-    elif tipo == "ambigua":
+    elif formato == "zona":
+        hallazgos.append(Hallazgo("FECHA_ZONA", campo, datos))
+    elif formato == "ambigua":
+        if tipo == "observaciones":
+            raise SolicitudRechazada("FECHA_AMBIGUA_OBS", campo, recibido=datos["recibido"])
         hallazgos.append(Hallazgo("FECHA_AMBIGUA", campo, datos))
     if fecha < catalogo.fecha_inicio:
         raise SolicitudRechazada(
@@ -425,6 +475,20 @@ def normalizar_fecha(
             tienda_id=tienda_id,
             apertura=apertura.isoformat(),
             fecha=fecha.isoformat(),
+        )
+    fin = catalogo.fecha_fin_cobertura.isoformat()
+    if fecha > catalogo.fecha_fin_cobertura and tipo == "observaciones":
+        raise SolicitudRechazada(
+            "FECHA_FUERA_COBERTURA_OBS", campo, fecha=fecha.isoformat(), fin=fin
+        )
+    fin_hist = catalogo.fecha_fin_historico
+    if tipo == "observaciones" and fin_hist is not None and fecha <= fin_hist:
+        hallazgos.append(
+            Hallazgo(
+                "OBSERVACION_EN_HISTORICO",
+                campo,
+                {"fecha": fecha.isoformat(), "fin": fin_hist.isoformat()},
+            )
         )
     if fecha > catalogo.fecha_fin_cobertura:
         hallazgos.append(

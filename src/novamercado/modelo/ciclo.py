@@ -25,9 +25,9 @@ from novamercado.db import repos
 from novamercado.db.conexion import conectar
 from novamercado.features.panel import leer_contexto, leer_historia
 from novamercado.modelo.baseline import ajustar_baseline
-from novamercado.modelo.criterio import Decision, decidir_reemplazo
+from novamercado.modelo.criterio import DIAS_MINIMOS, Decision, decidir_reemplazo
 from novamercado.modelo.hgb import DIAS_CALIBRACION, HIPERPARAMETROS, VIDA_MEDIA_DIAS, ModeloHGB
-from novamercado.modelo.validacion import entrenar_y_evaluar
+from novamercado.modelo.validacion import dias_evaluables, entrenar_y_evaluar
 
 log = logging.getLogger(__name__)
 
@@ -91,10 +91,14 @@ def entrenar_y_registrar(
 ) -> Resultado:
     """Entrena el retador, lo evalúa contra vigente y baseline (§4) y lo registra con su linaje.
 
-    Orden: registrar la versión → mover el alias solo si la decisión lo permite (y si
-    `mover_alias`). Sin vigente y con un retador que no mejora al baseline, se registra y
-    promueve el baseline (el servicio necesita un modelo). Cualquier excepción sale antes de
-    tocar el alias.
+    - Si el vigente no tiene días nuevos suficientes para evaluar (condición 1 de §4.2), no se
+      entrena: el resultado ya se sabe y se ahorra el tiempo de entrenamiento.
+    - Cada ejecución deja sus runs en MLflow (evidencia), pero **solo el modelo promovido se
+      registra** como versión del Registry: los perdedores no llenan el Registry.
+    - Orden: registrar la versión → mover el alias solo si la decisión lo permite (y si
+      `mover_alias`). Sin vigente y con un retador que no mejora al baseline, se registra y
+      promueve el baseline (el servicio necesita un modelo). Cualquier excepción sale antes de
+      tocar el alias.
     """
     import mlflow
     from mlflow import MlflowClient
@@ -113,6 +117,25 @@ def entrenar_y_registrar(
         raise RuntimeError("No hay datos para entrenar (¿falta la carga inicial?)")
 
     vigente = cargar_vigente(cfg) if comparar else None
+    if vigente is not None and vigente.corte is not None:
+        dias = dias_evaluables(historia["fecha"], vigente.corte)
+        if dias < DIAS_MINIMOS:
+            motivo = (
+                f"Solo {dias} días evaluables después del corte del vigente "
+                f"(mínimo {DIAS_MINIMOS}): se conserva el vigente sin entrenar"
+            )
+            log.info(motivo)
+            return Resultado(
+                promovido=False,
+                version=vigente.version,
+                version_registrada=None,
+                version_previa=vigente.version,
+                motivo=motivo,
+                detalle={
+                    "dias_evaluables": dias,
+                    "segundos": round(time.perf_counter() - t0, 1),
+                },
+            )
     res = entrenar_y_evaluar(
         historia,
         ctx,
@@ -186,16 +209,22 @@ def entrenar_y_registrar(
             python_model=ModeloNovaMercado(final),
             code_paths=[str(RUTA_PAQUETE)],
             pip_requirements=REQUISITOS_PIP,
-            registered_model_name=cfg.modelo_nombre,
         )
-        version = str(info.registered_model_version)
-        log.info("Run %s: versión registrada %s (%s)", run.info.run_id, version, decision.motivo)
+        version: str | None = None
+        if decision.promover:
+            mv = mlflow.register_model(info.model_uri, cfg.modelo_nombre)
+            version = str(mv.version)
+            mlflow.set_tag("version_registrada", version)
+        log.info(
+            "Run %s: versión registrada %s (%s)", run.info.run_id, version or "—", decision.motivo
+        )
 
     cliente = MlflowClient(tracking_uri=cfg.mlflow_uri, registry_uri=cfg.mlflow_uri)
-    cliente.set_model_version_tag(cfg.modelo_nombre, version, "promovido", str(decision.promover))
+    if version is not None:
+        cliente.set_model_version_tag(cfg.modelo_nombre, version, "promovido", "True")
     version_previa = vigente.version if vigente else None
     version_vigente = version_previa
-    if decision.promover and mover_alias:
+    if decision.promover and mover_alias and version is not None:
         cliente.set_registered_model_alias(cfg.modelo_nombre, cfg.modelo_alias, version)
         version_vigente = version
     return Resultado(

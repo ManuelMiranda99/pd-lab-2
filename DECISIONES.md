@@ -35,15 +35,27 @@ el laboratorio van primero; luego las decisiones de stack y de operación.
 - **Tipos sin pérdida → reparar; con pérdida → advertir.** `"3"`, `8.0`, `"1,292"`, `"812,0"`,
   `"T05"`, `5.0` se reparan; `2.5` se advierte. Un booleano nunca es un número (se bloquea la
   conversión laxa de Pydantic: los modelos canónicos son `strict`). `NaN`/`Infinity` y enteros
-  que no caben en un `integer` de PostgreSQL son inválidos. `"1.234"` se lee como decimal (punto
-  decimal JSON); `"1,234"` como miles (coma seguida de tres dígitos).
+  que no caben en un `integer` de PostgreSQL son inválidos. `"1,234"` se lee como miles (coma
+  seguida de tres dígitos) y `"1.234.567"` también; `"1.234"` (un solo punto y tres decimales) es
+  **ambiguo** —en Guatemala se usan ambos separadores—: en ventas no se guarda y se advierte, en
+  promoción se lee con punto decimal (los valores son pequeños) y se advierte.
+- **Texto que no se puede codificar** (surrogates UTF-16 sueltos, `"\ud800"`, JSON válido): se
+  reemplaza por `?` y se repara; nunca llega a la respuesta ni a Postgres (antes terminaba en 500).
+- **Plausibilidad contra el histórico:** el límite de "enorme" no es el tipo de Postgres sino el
+  dominio de los datos. Ventas por encima de `5 × máximo histórico de la tienda y familia + 20` no
+  se guardan y se advierte; `en_promocion` por encima de `2 × máximo histórico de la familia + 5`
+  se acota a ese máximo y se advierte.
+- **Última red:** cualquier excepción no prevista responde 503 con `detail` y queda en el log;
+  nunca 500.
 - **Claves:** alias, mayúsculas, espacios y camelCase se reparan (`tienda` → `tienda_id`). Si la
   misma clave llega dos veces (repetida en el JSON, leída con `object_pairs_hook`, o canónica y
   alias) con el mismo valor normalizado → reparar; con valores distintos → **rechazar** si es
   `tienda_id`/`fecha` (no se puede saber a qué tienda o día se refiere) y **advertir** si es de un
   ítem (predicción: último valor; observación: no se guarda).
 - **Identidad irreparable → 422:** tienda ausente, ilegible o inexistente; fecha ausente,
-  ilegible, imposible, anterior al inicio del histórico o a la apertura de la tienda.
+  ilegible, imposible (incluida la hora `T25:00`), anterior al inicio del histórico o a la
+  apertura de la tienda. Un id de tienda solo se repara si la lectura es inequívoca: `"1e1"`,
+  `"5-0"` o `"1.000"` se rechazan.
 - **Ítem inválido → descartar y advertir;** sin ítems válidos → 422.
 - **Fuera de dominio:** en predicción se usa un valor por defecto documentado (`en_promocion = 0`)
   y se advierte; en observaciones **no se guarda** esa familia y se advierte (una venta inventada
@@ -55,7 +67,10 @@ el laboratorio van primero; luego las decisiones de stack y de operación.
   se asume día sin feriado). Las fechas pasadas dentro del histórico **no** se rechazan (el
   servicio opera con fechas simuladas y el ejemplo del Anexo es de 2025).
 - **Claves desconocidas:** se ignoran sin observación (el contrato admite campos adicionales); se
-  devuelven a la API para registrarlas en la BD.
+  devuelven a la API para registrarlas en la BD, también las de cada ítem (con su ruta,
+  `familias[0].comentario`).
+- **Mensajes acotados:** una lista de valores repetidos se resume después de 10 (`… (N en
+  total)`), para que un cuerpo enorme no infle la respuesta.
 
 ### 1.3 Decisiones sobre casos discutibles
 - **E05 (faltan familias en la predicción):** se predicen **todas** las familias del catálogo; las
@@ -66,11 +81,24 @@ el laboratorio van primero; luego las decisiones de stack y de operación.
   *Alternativas:* rechazar; usar la primera; sumar. *Justificación:* determinista, coincide con la
   semántica de JSON ante claves repetidas (gana la última) y no detiene la operación de la
   tienda. En observaciones, en cambio, la familia en conflicto **no se guarda**.
-- **Fecha ambigua `05/06/2026`:** se interpreta **día/mes** (convención de Guatemala) y se
-  advierte. Si un número es > 12 la lectura es única y se repara (`17/11/2025`, `11/17/2025`). Año
-  de dos dígitos → 422 (siglo y orden ambiguos a la vez).
-- **Fecha posterior a la cobertura de feriados:** advertir, no rechazar (el periodo de evaluación
-  está cubierto; fuera de él el servicio sigue respondiendo con un supuesto explícito).
+- **Fecha ambigua `05/06/2026`:** en **predicción** se interpreta **día/mes** (convención de
+  Guatemala) y se advierte. En **observaciones se rechaza (422)**: guardar ventas reales en el
+  día equivocado sería inventar datos y además dejaría sin dato el día correcto. Si un número es
+  > 12 la lectura es única y se repara (`17/11/2025`, `11/17/2025`). Año de dos dígitos → 422.
+- **Fecha posterior a la cobertura de feriados:** en **predicción** se advierte (el servicio sigue
+  respondiendo con un supuesto explícito). En **observaciones se rechaza (422)**: el periodo de
+  operación está cubierto por `feriados.csv`, así que una venta real de un día posterior es un
+  error de fecha (un año mal escrito, `2062`). Guardarla movía el corte del modelo y las ventanas
+  de evaluación del reentrenamiento hasta esa fecha y podía congelar las promociones futuras; el
+  entrenamiento además ignora esas filas (defensa en profundidad, `features/panel.py`).
+- **Observación de un día del histórico publicado:** se guarda (gana sobre el histórico, §5.8) y
+  se **advierte** que reemplaza al dato publicado.
+- **Fecha con hora y zona horaria:** con `-06:00` (hora de Guatemala) o a medianoche UTC
+  (`T00:00:00Z`, la forma habitual de serializar "solo el día") la lectura es inequívoca y se
+  repara. Con otra zona se usa el día escrito **sin convertir** y se advierte (convertir
+  `T00:00:00Z` a hora local daría el día anterior, que casi nunca es lo que se quiso decir).
+- **Un solo ítem sin lista o un ítem como texto JSON:** se reparan (`"familias": {"familia_id":
+  …}` es una lista de un ítem; un ítem `"{\"familia_id\": …}"` se decodifica).
 - **Familia aproximada (`lacteo`, `mascota`):** si una sola familia tiene similitud ≥ 0.8 se usa y
   se advierte; si no hay o hay varias candidatas, se descarta el ítem y se advierte.
 - **E08 / E10 (`"50,5"`):** ventas negativas o con decimales no se guardan: no se puede saber la
@@ -94,6 +122,7 @@ el laboratorio van primero; luego las decisiones de stack y de operación.
 | `RAIZ_NO_OBJETO` | La raíz del JSON no es un objeto (lista, texto, número) | rechazar | 422 |  |
 | `CODIFICACION` | Texto en codificación distinta de UTF-8 (Latin-1, UTF-16) | reparar | se decodifica y se continúa | bytes Latin-1 |
 | `JSON_ANIDADO` | Objeto JSON enviado como texto JSON (doble codificación) | reparar | se decodifica una vez más |  |
+| `TEXTO_INVALIDO` | Texto con caracteres Unicode inválidos (surrogates UTF-16 sueltos, `\ud800`) | reparar | se reemplazan por `?` y se continúa |  |
 | `FORMA_TRANSPORTE` | BOM UTF-8 o `Content-Type` distinto de JSON | ignorar | se lee el cuerpo como JSON, sin observación |  |
 | `CLAVE_RENOMBRADA` | Clave con alias, mayúsculas, espacios o camelCase | reparar | se usa la clave canónica | E07 `tienda` |
 | `CLAVE_DUPLICADA_IGUAL` | Clave repetida (o canónica y alias) con el mismo valor | reparar | se conserva un valor |  |
@@ -105,15 +134,21 @@ el laboratorio van primero; luego las decisiones de stack y de operación.
 | `TIENDA_ILEGIBLE` | Id de tienda no interpretable (booleano, lista, `5.5`, texto) | rechazar | 422 |  |
 | `TIENDA_INEXISTENTE` | Tienda que no está en el catálogo | rechazar | 422 |  |
 | `FECHA_FORMATO` | Fecha en otro formato inequívoco (hora, `/`, `AAAAMMDD`, D/M) | reparar | se usa AAAA-MM-DD | E04 `17/11/2025`, `…T00:00:00` |
-| `FECHA_AMBIGUA` | Fecha D/M/AAAA con día y mes ≤ 12 (`05/06/2026`) | advertir | se interpreta como DD/MM/AAAA |  |
+| `FECHA_ZONA` | Fecha con hora y zona horaria (`…T01:00:00+00:00`) | advertir | se usa el día escrito, sin convertir la zona horaria |  |
+| `FECHA_AMBIGUA` | Predicción: fecha D/M/AAAA con día y mes ≤ 12 (`05/06/2026`) | advertir | se interpreta como DD/MM/AAAA |  |
+| `FECHA_AMBIGUA_OBS` | Observación: fecha D/M/AAAA con día y mes ≤ 12 (guardar ventas reales en el día equivocado sería inventar datos) | rechazar | 422 |  |
 | `FECHA_FALTANTE` | Falta `fecha` o es nula | rechazar | 422 |  |
-| `FECHA_ILEGIBLE` | Fecha ilegible o imposible (`2025-02-30`, año de 2 dígitos) | rechazar | 422 |  |
+| `FECHA_ILEGIBLE` | Fecha ilegible o imposible (`2025-02-30`, año de 2 dígitos, hora `25:00`) | rechazar | 422 |  |
 | `FECHA_ANTES_HISTORICO` | Fecha anterior al inicio del histórico | rechazar | 422 |  |
 | `FECHA_ANTES_APERTURA` | Fecha anterior a la apertura de la tienda | rechazar | 422 |  |
-| `FECHA_FUERA_COBERTURA` | Fecha posterior al último día de `feriados.csv` | advertir | se responde sin información de feriados para ese día |  |
+| `FECHA_FUERA_COBERTURA` | Predicción: fecha posterior al último día de `feriados.csv` | advertir | se responde sin información de feriados para ese día |  |
+| `FECHA_FUERA_COBERTURA_OBS` | Observación: fecha posterior al último día de `feriados.csv` (el periodo de operación está cubierto por ese archivo; una venta real posterior es un error de fecha) | rechazar | 422 |  |
+| `OBSERVACION_EN_HISTORICO` | Observación de un día que ya está en el histórico publicado | advertir | se guarda y reemplaza al dato publicado en el panel (§5.8) |  |
 | `LISTA_COMO_OBJETO` | Lista de familias enviada como objeto `{familia: valor}` | reparar | se convierte en lista |  |
 | `LISTA_DUPLICADA` | Lista de familias repetida (o con alias) con contenido distinto | rechazar | 422 |  |
 | `SIN_FAMILIAS` | Lista de familias ausente, vacía o sin familias reconocibles | rechazar | 422 |  |
+| `LISTA_UN_ITEM` | Lista de familias enviada como un solo ítem (objeto con `familia_id`) | reparar | se trata como una lista de un ítem |  |
+| `ITEM_COMO_TEXTO` | Ítem de la lista enviado como texto JSON (`"{\"familia_id\": …}"`) | reparar | se decodifica el ítem |  |
 | `ITEM_INVALIDO` | Ítem de la lista que no es un objeto | advertir | se descarta el ítem |  |
 | `FAMILIA_FORMATO` | Familia escrita de otra forma (mayúsculas, acentos, nombre) | reparar | se usa el id del catálogo | E02 `LÁCTEOS`, `Frutas y Verduras` |
 | `FAMILIA_APROXIMADA` | Familia con coincidencia aproximada única (`lacteo`) | advertir | se usa la familia más cercana |  |
@@ -127,9 +162,13 @@ el laboratorio van primero; luego las decisiones de stack y de operación.
 | `PROMOCION_FALTANTE` | Falta `en_promocion` o es nulo | advertir | se usa 0 |  |
 | `PROMOCION_DECIMAL` | `en_promocion` con decimales (`2.5`) | advertir | se redondea al entero más cercano (mitades hacia arriba) |  |
 | `PROMOCION_INVALIDA` | `en_promocion` negativo, booleano, no numérico, NaN/Infinity o enorme | advertir | se usa 0 |  |
+| `PROMOCION_AMBIGUA` | `en_promocion` con punto y tres decimales (`"1.000"`: ¿uno o mil?) | advertir | se lee con punto decimal (los valores de promoción son pequeños) |  |
+| `PROMOCION_ATIPICA` | `en_promocion` muy por encima del máximo histórico de la familia | advertir | se usa el máximo histórico de la familia |  |
 | `VENTAS_NEGATIVAS` | Ventas negativas (devoluciones) | advertir | no se guarda esa familia | E08 `-4` |
 | `VENTAS_DECIMAL` | Ventas con decimales (`"50,5"`) | advertir | no se guarda esa familia |  |
 | `VENTAS_INVALIDAS` | Ventas ausentes, nulas, booleanas, no numéricas, NaN/Infinity o enormes | advertir | no se guarda esa familia |  |
+| `VENTAS_AMBIGUAS` | Ventas con punto y tres decimales (`"1.000"`: ¿uno o mil?) | advertir | no se guarda esa familia |  |
+| `VENTAS_ATIPICAS` | Ventas muy por encima del máximo histórico de la tienda y familia | advertir | no se guarda esa familia (un valor así contaminaría el panel y el reentrenamiento) |  |
 | `OBSERVACION_REPETIDA` | Reenvío idéntico de una observación | ignorar | upsert idempotente: `registros_guardados = 0` | E09 |
 <!-- politicas:fin -->
 
@@ -253,8 +292,11 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
 
 ### 4.1 Retador contra vigente en las mismas ventanas recientes (rolling origin)
 - **Decisión:** el DAG evalúa los dos modelos sobre los **mismos días**: los días con observación
-  posteriores al corte de entrenamiento del vigente (los últimos 21 como máximo), en ventanas de 7
-  días.
+  posteriores al corte de entrenamiento del vigente (los últimos 21 como máximo), en ventanas
+  **completas** de 7 días contadas desde el final; el resto más antiguo (1–6 días) se descarta,
+  porque una ventana corta pesaría igual que una completa en el conteo de ventanas ganadas. El
+  baseline guarda también su corte (`fecha_corte`): si el vigente es el baseline del arranque, se
+  compara solo en días que no vio.
   - **Vigente:** se usa tal cual, sin reentrenar. Predice cada día `D` con variables construidas
     solo con datos `< D` y con el `en_promocion` de las solicitudes (§6.3).
   - **Retador:** su receta se reentrena con datos anteriores al inicio de cada ventana (origen
@@ -272,7 +314,9 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
 
 ### 4.2 Regla de promoción
 - **Decisión:** el retador se promueve (se mueve el alias `champion`) solo si se cumplen **todas**:
-  1. hay al menos 7 días evaluables después del corte del vigente;
+  1. hay al menos 14 días evaluables después del corte del vigente (dos ventanas completas: con
+     una sola, la regla de mayoría se cumpliría con una ventana que puede ser ruido). Si no los
+     hay, el DAG **no entrena**: el resultado ya se sabe;
   2. `costo_retador ≤ costo_vigente × (1 − 0.005)`, es decir, al menos 0.5 % de mejora en el total
      de las ventanas;
   3. el retador gana en al menos la mitad de las ventanas;
@@ -284,7 +328,8 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
   ambos costos y la regla aplicada, por ejemplo: `"Costo en validación 167 896 vs 169 132 del
   vigente (−0.7 %, gana 4/4 ventanas): promovido"` o `"Costo 169 256 vs 167 896 del vigente
   (+0.8 %): se conserva el vigente"`.
-- **Evidencia (rolling origin, 4 ventanas de 14 días en ene–feb 2026):**
+- **Evidencia (backtest de diseño, rolling origin con 4 ventanas de 14 días en ene–feb 2026; en
+  operación el DAG usa 2–3 ventanas de 7 días para caber en el tiempo, §4.3):**
 
 | Ventana | Vigente congelado (corte 2025-11-01) | Retador reentrenado | Placebo (otra configuración) | Baseline |
 |---|---|---|---|---|
@@ -324,12 +369,19 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
 - **Casos límite:** sin vigente, las ventanas son los últimos 21 días de la historia. Si el vigente
   no guarda su corte (modelos de la Fase 1), también. Si el retador del arranque en frío no
   mejora al baseline, se registra y promueve el baseline, porque el servicio necesita un modelo.
-  Reentrenar sin días nuevos da "Solo 0 días evaluables…" y no toca `champion` (la versión queda
-  registrada sin alias, como evidencia).
+  Reentrenar con menos de 14 días nuevos da "Solo N días evaluables… se conserva el vigente sin
+  entrenar" y no toca `champion`: no se entrena (ahorra ~1 min de CPU) ni se registra nada.
+- **Registry solo con modelos promovidos:** cada reentreno deja sus runs y el artefacto del
+  retador en MLflow (evidencia y linaje), pero solo se crea una **versión del Registry** cuando el
+  criterio promueve. *Alternativa:* registrar siempre con el tag `promovido=False` (lo que se
+  hacía antes); llenaba el Registry de perdedores y el bootstrap podía asignar el alias a uno de
+  ellos si el alias se perdía (ahora solo considera versiones con `promovido=True`).
 - **Linaje en MLflow:** cada reentreno deja dos runs con el mismo id: `baseline-<id>` (rol
   `referencia`, costo del baseline en las mismas ventanas) y `<modelo>-<id>` (rol `retador`):
   hiperparámetros, `datos_sha256`, rango de fechas, filas, observaciones, corte, ventanas,
-  umbral, versión vigente, commit (`NOVAMERCADO_COMMIT` o git) y versión del paquete; métricas de
+  umbral, versión vigente, commit (`NOVAMERCADO_COMMIT`, argumento de construcción de las
+  imágenes: `NOVAMERCADO_COMMIT=$(git rev-parse HEAD) docker compose build`; sin él queda
+  `desconocido`, porque las imágenes no llevan git) y versión del paquete; métricas de
   costo (retador, vigente y baseline, en total y por ventana), MAE/RMSE/WAPE/sesgo, `q_f` por
   familia y duración; la tabla de ventanas en `evaluacion.json`; la decisión en el tag `decision`.
 - **Medido con el código de producción** (`scripts/evaluar_modelo.py`,
@@ -437,6 +489,15 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
   usa `restart: on-failure:3`; si MLflow no responde, sale con error y nunca entrena.
 - **Alternativas:** `depends_on` con la API esperando al bootstrap; consultar las dependencias en cada
   petición a `/health`.
+- **Componentes:** `mlflow` exige que el servidor responda **y** que el Registry conteste (su
+  backend vive en el Postgres del producto, §5.4: con la BD caída MLflow no puede servir el
+  alias). Si el alias apunta a una versión que no se pudo instalar (descarga o prueba de humo
+  fallidas), el servicio sigue con la anterior y `/health` informa `modelo_al_dia: false` →
+  `degradado`.
+- **Concurrencia:** `/health` y `/modelo` son `async` (solo leen memoria): responden aunque el pool
+  de hilos esté lleno de predicciones. La API corre con `OMP_NUM_THREADS=1`: el HGB usaba varios
+  hilos OpenMP por predicción y, con decenas de solicitudes en paralelo, la sobresuscripción de
+  CPU hacía el throughput menor que en serie.
 - **Justificación:** `/health` responde rápido y el camino de predicción nunca depende de MLflow.
 
 ### 5.10 Criterio de promoción provisional (Fase 1) — reemplazado por §4 en la Fase 5
@@ -517,8 +578,10 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
   ejecución entran en el siguiente reentreno.
 
 ### 6.2 MLflow, Airflow o la BD caídos → 503
-- **Decisión:** antes de disparar, la API comprueba MLflow (el chequeo de salud de cada 10 s) y
-  que el DAG exista y no esté pausado, y luego lo dispara en Airflow (timeout de 5 s). Si alguno no responde, si el DAG no existe o está
+- **Decisión:** antes de disparar, la API comprueba MLflow (el chequeo de salud de cada 10 s), la
+  salud de Airflow (metadatabase **y scheduler**, el mismo criterio que `/health`: sin scheduler
+  el dag run quedaría en cola sin avanzar) y que el DAG exista y no esté pausado, y luego lo
+  dispara en Airflow (timeout de 5 s). Si alguno no responde, si el DAG no existe o está
   pausado, o si la BD no está disponible, responde **503** con un `detail` que nombra la
   dependencia. La fila de `reentrenamientos` se crea antes de disparar. Si el disparo falla, queda
   como `fallido` con el motivo (sirve de auditoría), pero el id no se devuelve.

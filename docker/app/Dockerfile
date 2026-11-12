@@ -22,6 +22,9 @@ RUN pip install --no-deps . \
     && mkdir -p /var/cache/novamercado \
     && chown app:app /var/cache/novamercado
 
+ARG NOVAMERCADO_COMMIT=desconocido
+ENV NOVAMERCADO_COMMIT=${NOVAMERCADO_COMMIT}
+
 USER app
 EXPOSE 8000
 # Un solo worker: el modelo en memoria, el poller y el monitor de salud viven en el proceso.

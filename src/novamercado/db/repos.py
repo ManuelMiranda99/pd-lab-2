@@ -158,21 +158,42 @@ class FilasCatalogo:
     familias: list[tuple[str, str]]
     fecha_inicio: date | None
     fecha_fin_cobertura: date | None
+    fecha_fin_historico: date | None = None
+    max_ventas: list[tuple[int, str, int]] = field(default_factory=list)
+    max_promocion: list[tuple[str, int]] = field(default_factory=list)
 
 
 def leer_catalogo(conn: psycopg.Connection) -> FilasCatalogo:
-    """Tiendas, familias, primera fecha del histórico y última de `feriados`."""
+    """Tiendas, familias, rango del histórico, última fecha de `feriados` y máximos históricos
+    (referencia de plausibilidad para ventas y promociones)."""
     tiendas = conn.execute(
         "SELECT tienda_id, nombre, fecha_apertura FROM tiendas ORDER BY tienda_id"
     ).fetchall()
     familias = conn.execute(
         "SELECT familia_id, nombre FROM familias ORDER BY familia_id"
     ).fetchall()
-    inicio, fin = conn.execute(
-        "SELECT (SELECT min(fecha) FROM historico_ventas), (SELECT max(fecha) FROM feriados)"
+    inicio, fin, fin_historico = conn.execute(
+        "SELECT (SELECT min(fecha) FROM historico_ventas), (SELECT max(fecha) FROM feriados),"
+        " (SELECT max(fecha) FROM historico_ventas)"
     ).fetchone()
+    max_ventas = conn.execute(
+        "SELECT tienda_id, familia_id, max(ventas) FROM historico_ventas"
+        " GROUP BY tienda_id, familia_id"
+    ).fetchall()
+    max_promocion = conn.execute(
+        "SELECT familia_id, max(en_promocion) FROM historico_ventas"
+        " WHERE en_promocion IS NOT NULL GROUP BY familia_id"
+    ).fetchall()
     conn.commit()
-    return FilasCatalogo(list(tiendas), list(familias), inicio, fin)
+    return FilasCatalogo(
+        list(tiendas),
+        list(familias),
+        inicio,
+        fin,
+        fin_historico,
+        [(int(t), str(f), int(m)) for t, f, m in max_ventas if m is not None],
+        [(str(f), int(m)) for f, m in max_promocion if m is not None],
+    )
 
 
 # ---------------------------------------------------------------------------------------------
@@ -183,8 +204,10 @@ _MAX_CUERPO = 100_000  # caracteres del cuerpo crudo que se guardan (el límite 
 
 
 def texto_seguro(texto: str, largo: int | None = None) -> str:
-    """Texto apto para una columna TEXT/JSONB de Postgres (sin NUL), opcionalmente truncado."""
-    limpio = texto.replace("\x00", "\\u0000")
+    """Texto apto para una columna TEXT/JSONB de Postgres (UTF-8 válido, sin NUL), opcionalmente
+    truncado."""
+    limpio = texto.encode("utf-8", errors="replace").decode("utf-8")  # surrogates sueltos
+    limpio = limpio.replace("\x00", "\\u0000")
     return limpio if largo is None or len(limpio) <= largo else limpio[:largo] + "…"
 
 

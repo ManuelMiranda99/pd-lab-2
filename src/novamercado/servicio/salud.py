@@ -25,9 +25,17 @@ class EstadoSalud:
         return [n for n, ok in self.componentes.items() if not ok]
 
 
-def resumir(estado: EstadoSalud, hay_modelo: bool) -> tuple[int, dict]:
-    """(código HTTP, cuerpo) de `/health`. Sin modelo: 503."""
+def resumir(
+    estado: EstadoSalud, hay_modelo: bool, version_pendiente: str | None = None
+) -> tuple[int, dict]:
+    """(código HTTP, cuerpo) de `/health`. Sin modelo: 503.
+
+    `version_pendiente`: versión del alias que no se pudo instalar (descarga o prueba de humo
+    fallidas). El servicio sigue con la anterior, pero no está al día → `degradado`.
+    """
     componentes = {**estado.componentes, "modelo": hay_modelo}
+    if hay_modelo and version_pendiente is not None:
+        componentes["modelo_al_dia"] = False
     caidos = [n for n, ok in componentes.items() if not ok]
     if not hay_modelo:
         motivo = "Sin modelo cargado todavía"

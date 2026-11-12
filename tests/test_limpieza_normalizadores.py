@@ -46,7 +46,7 @@ CAT = catalogo_sintetico()
         (-4, "ok", -4),
         (2.5, "decimal", Decimal("2.5")),
         ("50,5", "decimal", Decimal("50.5")),
-        ("1.234", "decimal", Decimal("1.234")),
+        ("1.234", "ambiguo", Decimal("1.234")),
     ],
 )
 def test_interpretar_numero_valido(valor, estado, esperado):

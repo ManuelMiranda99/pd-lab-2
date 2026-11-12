@@ -43,6 +43,12 @@ def reentrenar(servicio: ServicioDep) -> JSONResponse:
     )
 
 
+@router.get("/reentrenar/", include_in_schema=False)
+def estado_sin_id() -> JSONResponse:
+    """Id vacío: no existe esa ejecución (404, en vez de la redirección a la ruta del POST)."""
+    return JSONResponse(status_code=404, content={"detail": "No existe ese reentrenamiento"})
+
+
 @router.get("/reentrenar/{id_}")
 def estado_reentreno(id_: str, servicio: ServicioDep) -> JSONResponse:
     actual = servicio.gestor.actual

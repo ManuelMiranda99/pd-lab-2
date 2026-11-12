@@ -88,6 +88,13 @@ _FILAS: tuple[Politica, ...] = (
         "el cuerpo era un texto con JSON; se decodificó",
     ),
     Politica(
+        "TEXTO_INVALIDO",
+        "Texto con caracteres Unicode inválidos (surrogates UTF-16 sueltos, `\\ud800`)",
+        _R,
+        "se reemplazan por `?` y se continúa",
+        "el cuerpo tenía caracteres Unicode inválidos; se reemplazaron por '?'",
+    ),
+    Politica(
         "FORMA_TRANSPORTE",
         "BOM UTF-8 o `Content-Type` distinto de JSON",
         _I,
@@ -171,16 +178,31 @@ _FILAS: tuple[Politica, ...] = (
         "E04 `17/11/2025`, `…T00:00:00`",
     ),
     Politica(
+        "FECHA_ZONA",
+        "Fecha con hora y zona horaria (`…T01:00:00+00:00`)",
+        _A,
+        "se usa el día escrito, sin convertir la zona horaria",
+        "'{recibido}' trae zona horaria; se usó el día escrito ({fecha}) sin convertirla",
+    ),
+    Politica(
         "FECHA_AMBIGUA",
-        "Fecha D/M/AAAA con día y mes ≤ 12 (`05/06/2026`)",
+        "Predicción: fecha D/M/AAAA con día y mes ≤ 12 (`05/06/2026`)",
         _A,
         "se interpreta como DD/MM/AAAA",
         "'{recibido}' es ambigua; se interpretó como {fecha} (día/mes/año)",
     ),
+    Politica(
+        "FECHA_AMBIGUA_OBS",
+        "Observación: fecha D/M/AAAA con día y mes ≤ 12 (guardar ventas reales en el día "
+        "equivocado sería inventar datos)",
+        _X,
+        "422",
+        "'{recibido}' es ambigua (día/mes o mes/día); envíe la fecha como AAAA-MM-DD",
+    ),
     Politica("FECHA_FALTANTE", "Falta `fecha` o es nula", _X, "422", "falta la fecha"),
     Politica(
         "FECHA_ILEGIBLE",
-        "Fecha ilegible o imposible (`2025-02-30`, año de 2 dígitos)",
+        "Fecha ilegible o imposible (`2025-02-30`, año de 2 dígitos, hora `25:00`)",
         _X,
         "422",
         "no se pudo interpretar '{recibido}' como fecha",
@@ -201,11 +223,28 @@ _FILAS: tuple[Politica, ...] = (
     ),
     Politica(
         "FECHA_FUERA_COBERTURA",
-        "Fecha posterior al último día de `feriados.csv`",
+        "Predicción: fecha posterior al último día de `feriados.csv`",
         _A,
         "se responde sin información de feriados para ese día",
         "la fecha {fecha} es posterior a la cobertura de feriados ({fin}); "
         "se asume día sin feriado",
+    ),
+    Politica(
+        "FECHA_FUERA_COBERTURA_OBS",
+        "Observación: fecha posterior al último día de `feriados.csv` (el periodo de operación "
+        "está cubierto por ese archivo; una venta real posterior es un error de fecha)",
+        _X,
+        "422",
+        "la fecha {fecha} es posterior a la cobertura de feriados ({fin}); "
+        "no se registran ventas reales fuera del periodo de operación",
+    ),
+    Politica(
+        "OBSERVACION_EN_HISTORICO",
+        "Observación de un día que ya está en el histórico publicado",
+        _A,
+        "se guarda y reemplaza al dato publicado en el panel (§5.8)",
+        "la fecha {fecha} está dentro del histórico publicado (hasta {fin}); "
+        "la observación reemplaza al dato publicado",
     ),
     # --- Lista de familias e ítems --------------------------------------------------------------
     Politica(
@@ -228,6 +267,20 @@ _FILAS: tuple[Politica, ...] = (
         _X,
         "422",
         "no hay familias válidas en '{lista}'",
+    ),
+    Politica(
+        "LISTA_UN_ITEM",
+        "Lista de familias enviada como un solo ítem (objeto con `familia_id`)",
+        _R,
+        "se trata como una lista de un ítem",
+        "'{lista}' era un solo ítem; se trató como una lista de un elemento",
+    ),
+    Politica(
+        "ITEM_COMO_TEXTO",
+        'Ítem de la lista enviado como texto JSON (`"{\\"familia_id\\": …}"`)',
+        _R,
+        "se decodifica el ítem",
+        "el ítem venía como texto JSON; se decodificó",
     ),
     Politica(
         "ITEM_INVALIDO",
@@ -327,6 +380,20 @@ _FILAS: tuple[Politica, ...] = (
         "'{recibido}' no es válido ({motivo}); se asumió 0",
     ),
     Politica(
+        "PROMOCION_AMBIGUA",
+        '`en_promocion` con punto y tres decimales (`"1.000"`: ¿uno o mil?)',
+        _A,
+        "se lee con punto decimal (los valores de promoción son pequeños)",
+        "'{recibido}' es ambiguo (punto decimal o de miles); se interpretó como {valor}",
+    ),
+    Politica(
+        "PROMOCION_ATIPICA",
+        "`en_promocion` muy por encima del máximo histórico de la familia",
+        _A,
+        "se usa el máximo histórico de la familia",
+        "{valor} supera {limite} (máximo histórico de la familia: {maximo}); se usó {maximo}",
+    ),
+    Politica(
         "VENTAS_NEGATIVAS",
         "Ventas negativas (devoluciones)",
         _A,
@@ -347,6 +414,21 @@ _FILAS: tuple[Politica, ...] = (
         _A,
         "no se guarda esa familia",
         "'{recibido}' no es válido ({motivo}); no se guardó",
+    ),
+    Politica(
+        "VENTAS_AMBIGUAS",
+        'Ventas con punto y tres decimales (`"1.000"`: ¿uno o mil?)',
+        _A,
+        "no se guarda esa familia",
+        "'{recibido}' es ambiguo (punto decimal o de miles); no se guardó",
+    ),
+    Politica(
+        "VENTAS_ATIPICAS",
+        "Ventas muy por encima del máximo histórico de la tienda y familia",
+        _A,
+        "no se guarda esa familia (un valor así contaminaría el panel y el reentrenamiento)",
+        "{valor} supera {limite} ({factor}× el máximo histórico de la tienda y familia, "
+        "{maximo}); no se guardó",
     ),
     Politica(
         "OBSERVACION_REPETIDA",

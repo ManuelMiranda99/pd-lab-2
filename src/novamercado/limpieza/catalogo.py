@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import csv
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from types import MappingProxyType
@@ -32,12 +32,21 @@ class Catalogo:
     """Catálogo inmutable que se inyecta en la limpieza.
 
     ``familias`` conserva el orden del catálogo (id → nombre legible).
+
+    Referencias de plausibilidad (derivadas del histórico publicado; vacías = sin control):
+
+    - ``fecha_fin_historico``: último día del histórico (una observación anterior lo reemplaza);
+    - ``max_ventas``: máximo histórico de ventas por ``(tienda_id, familia_id)``;
+    - ``max_promocion``: máximo histórico de ``en_promocion`` por familia.
     """
 
     tiendas: Mapping[int, Tienda]
     familias: Mapping[str, str]
     fecha_inicio: date
     fecha_fin_cobertura: date
+    fecha_fin_historico: date | None = None
+    max_ventas: Mapping[tuple[int, str], int] = field(default_factory=dict)
+    max_promocion: Mapping[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.fecha_inicio > self.fecha_fin_cobertura:
@@ -46,6 +55,8 @@ class Catalogo:
             raise ValueError("el catálogo necesita al menos una tienda y una familia")
         object.__setattr__(self, "tiendas", MappingProxyType(dict(self.tiendas)))
         object.__setattr__(self, "familias", MappingProxyType(dict(self.familias)))
+        object.__setattr__(self, "max_ventas", MappingProxyType(dict(self.max_ventas)))
+        object.__setattr__(self, "max_promocion", MappingProxyType(dict(self.max_promocion)))
 
 
 def _leer_csv(ruta: Path) -> list[dict[str, str]]:

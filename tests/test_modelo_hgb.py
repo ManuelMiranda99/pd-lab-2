@@ -201,12 +201,16 @@ def test_ventanas_despues_del_corte_ultimos_21_en_bloques_de_7():
     fechas = list(pd.date_range("2026-01-01", periods=40, freq="D"))
     v = ventanas_evaluacion(fechas, None)
     assert [len(x) for x in v] == [7, 7, 7] and v[-1][-1] == fechas[-1]
+    # Solo ventanas completas, contadas desde el final: de 10 días nuevos quedan los últimos 7.
     v = ventanas_evaluacion(fechas, fechas[-10])
-    assert [len(x) for x in v] == [7, 3] and v[0][0] == fechas[-10]
+    assert [len(x) for x in v] == [7] and v[0][0] == fechas[-7] and v[0][-1] == fechas[-1]
+    v = ventanas_evaluacion(fechas, fechas[-16])
+    assert [len(x) for x in v] == [7, 7] and v[0][0] == fechas[-14]
+    assert ventanas_evaluacion(fechas, fechas[-6]) == []  # 6 días: ninguna ventana completa
     assert ventanas_evaluacion(fechas, fechas[-1] + pd.Timedelta(days=1)) == []
     con_hueco = fechas[:30] + fechas[35:]  # faltan días: solo cuentan los días con dato
     v = ventanas_evaluacion(con_hueco, fechas[25])
-    assert sum(len(x) for x in v) == 10
+    assert sum(len(x) for x in v) == 7
 
 
 def test_arranque_en_frio_evalua_contra_baseline_y_promueve(historia):
@@ -221,11 +225,11 @@ def test_arranque_en_frio_evalua_contra_baseline_y_promueve(historia):
 
 def test_vigente_se_evalua_solo_despues_de_su_corte(historia):
     ctx = _ctx()
-    corte = historia["fecha"].max() - pd.Timedelta(days=9)
+    corte = historia["fecha"].max() - pd.Timedelta(days=15)
     vigente = RecetaHGB(historia[historia["fecha"] < corte], ctx, COSTOS).modelo(corte)
     res = entrenar_y_evaluar(historia, ctx, COSTOS, vigente=vigente, corte_vigente=corte)
-    assert res.comparacion.dias == 10 and [v["dias"] for v in res.ventanas] == [7, 3]
-    assert res.ventanas[0]["inicio"] == str(corte.date())
+    assert res.comparacion.dias == 14 and [v["dias"] for v in res.ventanas] == [7, 7]
+    assert res.ventanas[0]["inicio"] == str((corte + pd.Timedelta(days=2)).date())
     assert all("costo_vigente" in v for v in res.ventanas)
 
 
@@ -285,12 +289,19 @@ def test_criterio_sin_vigente_solo_exige_mejorar_al_baseline():
 
 
 def test_motivo_legible_con_ambos_costos_y_umbral_configurable():
-    comp = Comparacion(retador=[167896.0], baseline=[269959.0], vigente=[169132.0], dias=7)
+    comp = Comparacion(
+        retador=[83948.0, 83948.0],
+        baseline=[134979.5, 134979.5],
+        vigente=[84566.0, 84566.0],
+        dias=14,
+    )
     d = decidir_reemplazo(comp)
     assert d.motivo == (
-        "Costo en validación 167 896 vs 169 132 del vigente (−0.7 %, gana 1/1 ventanas): promovido"
+        "Costo en validación 167 896 vs 169 132 del vigente (−0.7 %, gana 2/2 ventanas): promovido"
     )
     assert not decidir_reemplazo(comp, mejora_minima=0.01).promover
+    corto = Comparacion(retador=[1.0], baseline=[2.0], vigente=[3.0], dias=7)
+    assert "mínimo 14" in decidir_reemplazo(corto).motivo  # una sola ventana no alcanza
 
 
 def test_pesos_recencia_desde_el_corte_y_sin_ponderar_por_defecto():

@@ -25,7 +25,7 @@ from novamercado.contrato.entrada import (
 from novamercado.contrato.salida import Calidad
 from novamercado.limpieza.calidad import Hallazgo, SolicitudRechazada, construir_calidad, mostrar
 from novamercado.limpieza.catalogo import Catalogo
-from novamercado.limpieza.lectura import leer_cuerpo, parejas
+from novamercado.limpieza.lectura import ObjetoJSON, leer_cuerpo, parejas, sanear_textos
 from novamercado.limpieza.normalizadores import (
     ALIAS_ITEM_OBSERVACIONES,
     ALIAS_ITEM_PREDICCION,
@@ -91,11 +91,10 @@ def politica_promocion(valor: Any, campo: str) -> tuple[int, list[Hallazgo]]:
         return 0, [
             Hallazgo("PROMOCION_INVALIDA", campo, {"recibido": recibido, "motivo": "negativo"})
         ]
-    if n.estado == "decimal":
+    if n.estado in ("decimal", "ambiguo"):
         entero = int(n.valor.to_integral_value(rounding=ROUND_HALF_UP))  # type: ignore[union-attr]
-        return entero, [
-            Hallazgo("PROMOCION_DECIMAL", campo, {"recibido": recibido, "valor": entero})
-        ]
+        codigo = "PROMOCION_DECIMAL" if n.estado == "decimal" else "PROMOCION_AMBIGUA"
+        return entero, [Hallazgo(codigo, campo, {"recibido": recibido, "valor": entero})]
     if n.estado == "reparado":
         return n.valor, [
             Hallazgo("NUMERO_FORMATO", campo, {"recibido": recibido, "valor": n.valor})
@@ -115,6 +114,8 @@ def politica_ventas(valor: Any, campo: str) -> tuple[int | None, list[Hallazgo]]
         return None, [Hallazgo("VENTAS_NEGATIVAS", campo, {"recibido": recibido})]
     if n.estado == "decimal":
         return None, [Hallazgo("VENTAS_DECIMAL", campo, {"recibido": recibido})]
+    if n.estado == "ambiguo":
+        return None, [Hallazgo("VENTAS_AMBIGUAS", campo, {"recibido": recibido})]
     if n.estado == "reparado":
         return n.valor, [
             Hallazgo("NUMERO_FORMATO", campo, {"recibido": recibido, "valor": n.valor})
@@ -131,8 +132,31 @@ def _huella(valor: Any) -> str:
     return json.dumps(valor, sort_keys=True, default=repr, ensure_ascii=False)
 
 
+#: Valores que se listan en un mensaje antes de resumir (una lista enorme no infla la respuesta).
+_MAX_VALORES_MENSAJE = 10
+
+#: Plausibilidad (DECISIONES §1.3): por encima de estos límites el valor se considera atípico.
+FACTOR_ATIPICO_VENTAS = 5
+MARGEN_ATIPICO_VENTAS = 20
+FACTOR_ATIPICO_PROMOCION = 2
+MARGEN_ATIPICO_PROMOCION = 5
+
+
+def limite_ventas(maximo: int) -> int:
+    """Ventas atípicas: más de ``5 × máximo histórico + 20`` para esa tienda y familia."""
+    return FACTOR_ATIPICO_VENTAS * maximo + MARGEN_ATIPICO_VENTAS
+
+
+def limite_promocion(maximo: int) -> int:
+    """Promoción atípica: más de ``2 × máximo histórico + 5`` para esa familia."""
+    return FACTOR_ATIPICO_PROMOCION * maximo + MARGEN_ATIPICO_PROMOCION
+
+
 def _texto_valores(valores: list[Any]) -> str:
-    return ", ".join("null" if v is None else str(v) for v in valores)
+    textos = ["null" if v is None else str(v) for v in valores]
+    if len(textos) <= _MAX_VALORES_MENSAJE:
+        return ", ".join(textos)
+    return ", ".join(textos[:_MAX_VALORES_MENSAJE]) + f", … ({len(textos)} en total)"
 
 
 def _sin_repetidos(hallazgos: list[Hallazgo]) -> tuple[Hallazgo, ...]:
@@ -195,6 +219,14 @@ def _items(
             )
         )
     clave, valor = candidatos[-1].clave, candidatos[-1].valor
+    es_prediccion = campo_valor == "en_promocion"
+    alias_item = ALIAS_ITEM_PREDICCION if es_prediccion else ALIAS_ITEM_OBSERVACIONES
+    if isinstance(valor, dict) and resolver_claves(parejas(valor), alias_item).candidatos.get(
+        "familia_id"
+    ):
+        # Un solo ítem enviado sin la lista: {"familia_id": "abarrotes", "en_promocion": 3}.
+        hallazgos.append(Hallazgo("LISTA_UN_ITEM", clave, {"lista": clave}))
+        return clave, [(f"{clave}[0]", valor)]
     if isinstance(valor, list):
         items = [(f"{clave}[{i}]", item) for i, item in enumerate(valor)]
     elif isinstance(valor, dict) and valor:
@@ -265,24 +297,45 @@ class _Entrada:
     base: str
 
 
+def _item_desde_texto(item: Any) -> Any:
+    """Un ítem enviado como texto JSON de un objeto se decodifica; si no, se devuelve igual."""
+    if not isinstance(item, str) or not item.strip().startswith("{"):
+        return item
+    try:
+        datos = json.loads(item, object_pairs_hook=ObjetoJSON.desde_pares)
+    except (ValueError, RecursionError):
+        return item
+    return sanear_textos(datos)[0] if isinstance(datos, dict) else item
+
+
 def _limpiar_items(
     items: list[tuple[str, Any]],
     catalogo: Catalogo,
     tipo: Tipo,
     hallazgos: list[Hallazgo],
+    ignoradas: list[str] | None = None,
 ) -> list[_Entrada]:
-    """Normaliza cada ítem; descarta (y advierte) los que no tienen familia reconocible."""
+    """Normaliza cada ítem; descarta (y advierte) los que no tienen familia reconocible.
+
+    Las claves desconocidas de cada ítem se agregan a ``ignoradas`` (con su ruta) para la BD.
+    """
     alias = ALIAS_ITEM_PREDICCION if tipo == "prediccion" else ALIAS_ITEM_OBSERVACIONES
     campo_valor = "en_promocion" if tipo == "prediccion" else "ventas"
     evaluar_valor = politica_promocion if tipo == "prediccion" else politica_ventas
     evaluar_familia = _evaluar_familia(catalogo)
     entradas: list[_Entrada] = []
     for base, item in items:
+        decodificado = _item_desde_texto(item)
+        if decodificado is not item:
+            hallazgos.append(Hallazgo("ITEM_COMO_TEXTO", base))
+            item = decodificado
         if not isinstance(item, dict):
             hallazgos.append(Hallazgo("ITEM_INVALIDO", base, {"tipo": mostrar(item)}))
             continue
         res = resolver_claves(parejas(item), alias, prefijo=f"{base}.")
         hallazgos.extend(res.hallazgos)
+        if ignoradas is not None:
+            ignoradas.extend(f"{base}.{k}" for k in res.ignoradas)
         cand_familia = res.candidatos.get("familia_id", [])
         if not cand_familia:
             hallazgos.append(
@@ -310,7 +363,11 @@ def _agrupar(entradas: list[_Entrada]) -> dict[str, list[_Entrada]]:
 
 
 def _identidad_comun(
-    datos: Any, catalogo: Catalogo, alias: dict[str, frozenset[str]], hallazgos: list[Hallazgo]
+    datos: Any,
+    catalogo: Catalogo,
+    alias: dict[str, frozenset[str]],
+    hallazgos: list[Hallazgo],
+    tipo: Tipo,
 ) -> tuple[ClavesResueltas, int, date]:
     if not isinstance(datos, dict):
         raise SolicitudRechazada("RAIZ_NO_OBJETO", "", tipo=type(datos).__name__)
@@ -320,7 +377,7 @@ def _identidad_comun(
         res, "tienda_id", lambda v, c: normalizar_tienda(v, catalogo, c), hallazgos
     )
     fecha = _identidad(
-        res, "fecha", lambda v, c: normalizar_fecha(v, catalogo, tienda_id, c), hallazgos
+        res, "fecha", lambda v, c: normalizar_fecha(v, catalogo, tienda_id, c, tipo), hallazgos
     )
     return res, tienda_id, fecha
 
@@ -339,9 +396,12 @@ def limpiar_prediccion(
     Una familia repetida con valores distintos usa la última aparición.
     """
     hallazgos = list(hallazgos_previos)
-    res, tienda_id, fecha = _identidad_comun(datos, catalogo, ALIAS_PREDICCION, hallazgos)
+    res, tienda_id, fecha = _identidad_comun(
+        datos, catalogo, ALIAS_PREDICCION, hallazgos, "prediccion"
+    )
     clave_lista, items = _items(res, "familias", "en_promocion", hallazgos)
-    grupos = _agrupar(_limpiar_items(items, catalogo, "prediccion", hallazgos))
+    ignoradas = list(res.ignoradas)
+    grupos = _agrupar(_limpiar_items(items, catalogo, "prediccion", hallazgos, ignoradas))
     if not grupos:
         raise SolicitudRechazada("SIN_FAMILIAS", clave_lista, lista=clave_lista)
 
@@ -356,7 +416,18 @@ def limpiar_prediccion(
             else:
                 datos_h |= {"valores": _texto_valores(valores), "valor": ultima.valor}
                 hallazgos.append(Hallazgo("FAMILIA_REPETIDA_PRED", ultima.base, datos_h))
-        familias.append(FamiliaPromocion(familia_id=fid, en_promocion=valores[-1]))
+        promocion = valores[-1]
+        maximo = catalogo.max_promocion.get(fid)
+        if maximo is not None and promocion > limite_promocion(maximo):
+            hallazgos.append(
+                Hallazgo(
+                    "PROMOCION_ATIPICA",
+                    f"{grupo[-1].base}.en_promocion",
+                    {"valor": promocion, "limite": limite_promocion(maximo), "maximo": maximo},
+                )
+            )
+            promocion = maximo
+        familias.append(FamiliaPromocion(familia_id=fid, en_promocion=promocion))
 
     faltantes = tuple(f for f in catalogo.familias if f not in grupos)
     if faltantes:
@@ -375,7 +446,7 @@ def limpiar_prediccion(
         calidad=construir_calidad(unicos),
         hallazgos=unicos,
         familias_completadas=faltantes,
-        claves_ignoradas=res.ignoradas,
+        claves_ignoradas=tuple(ignoradas),
     )
 
 
@@ -388,9 +459,12 @@ def limpiar_observaciones(
     guarda** (se advierte); las faltantes se advierten y se guardan las recibidas.
     """
     hallazgos = list(hallazgos_previos)
-    res, tienda_id, fecha = _identidad_comun(datos, catalogo, ALIAS_OBSERVACIONES, hallazgos)
+    res, tienda_id, fecha = _identidad_comun(
+        datos, catalogo, ALIAS_OBSERVACIONES, hallazgos, "observaciones"
+    )
     clave_lista, items = _items(res, "ventas", "ventas", hallazgos)
-    grupos = _agrupar(_limpiar_items(items, catalogo, "observaciones", hallazgos))
+    ignoradas = list(res.ignoradas)
+    grupos = _agrupar(_limpiar_items(items, catalogo, "observaciones", hallazgos, ignoradas))
     if not grupos:
         raise SolicitudRechazada("SIN_FAMILIAS", clave_lista, lista=clave_lista)
 
@@ -408,6 +482,22 @@ def limpiar_observaciones(
                 descartadas.append(fid)
                 continue
         if valores[-1] is None:
+            descartadas.append(fid)
+            continue
+        maximo = catalogo.max_ventas.get((tienda_id, fid))
+        if maximo is not None and valores[-1] > limite_ventas(maximo):
+            hallazgos.append(
+                Hallazgo(
+                    "VENTAS_ATIPICAS",
+                    f"{grupo[-1].base}.ventas",
+                    {
+                        "valor": valores[-1],
+                        "limite": limite_ventas(maximo),
+                        "factor": FACTOR_ATIPICO_VENTAS,
+                        "maximo": maximo,
+                    },
+                )
+            )
             descartadas.append(fid)
             continue
         ventas.append(VentaFamilia(familia_id=fid, ventas=valores[-1]))
@@ -429,7 +519,7 @@ def limpiar_observaciones(
         hallazgos=unicos,
         familias_descartadas=tuple(descartadas),
         familias_faltantes=faltantes,
-        claves_ignoradas=res.ignoradas,
+        claves_ignoradas=tuple(ignoradas),
     )
 
 

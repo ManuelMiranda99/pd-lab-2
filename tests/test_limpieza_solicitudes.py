@@ -208,7 +208,7 @@ def test_nc03_campos_extra_se_ignoran_sin_observacion():
     s["familias"][0]["comentario"] = "x"
     r = limpiar_prediccion(s, CAT)
     assert r.calidad.estado == "ok"
-    assert set(r.claves_ignoradas) == {"canal", "version_pos"}
+    assert set(r.claves_ignoradas) == {"canal", "version_pos", "familias[0].comentario"}
 
 
 def test_nc04_clave_identidad_repetida_igual_se_repara():

@@ -20,6 +20,8 @@ x-airflow-common: &airflow-common
   build:
     context: .
     dockerfile: docker/airflow/Dockerfile
+    args:
+      NOVAMERCADO_COMMIT: ${NOVAMERCADO_COMMIT:-desconocido}
   image: novamercado/airflow:3.3.2-0.1.0
   environment: &airflow-env
     <<: *producto-env
@@ -97,6 +99,8 @@ services:
     build:
       context: .
       dockerfile: docker/app/Dockerfile
+      args:
+        NOVAMERCADO_COMMIT: ${NOVAMERCADO_COMMIT:-desconocido}
     image: novamercado/app:0.1.0
     command: ["python", "-m", "novamercado.bootstrap"]
     environment:
@@ -119,9 +123,14 @@ services:
     build:
       context: .
       dockerfile: docker/app/Dockerfile
+      args:
+        NOVAMERCADO_COMMIT: ${NOVAMERCADO_COMMIT:-desconocido}
     environment:
       <<: *producto-env
       CACHE_MODELO_DIR: /var/cache/novamercado
+      # Un hilo OpenMP por predicción: con muchas solicitudes en paralelo, varios hilos por
+      # solicitud saturan la CPU (DECISIONES §5.9).
+      OMP_NUM_THREADS: "1"
       POLL_MODELO_SEGUNDOS: ${POLL_MODELO_SEGUNDOS:-20}
       SALUD_SEGUNDOS: ${SALUD_SEGUNDOS:-10}
       AIRFLOW_URL: http://airflow-apiserver:8080

@@ -51,7 +51,9 @@ def predecir(
     except Exception as exc:  # noqa: BLE001 — cualquier fallo del modelo es un 503
         log.exception("El modelo %s v%s falló al predecir", modelo.nombre, modelo.version)
         raise ErrorModelo(f"El modelo vigente no pudo predecir: {type(exc).__name__}") from exc
-    return [
-        sanear_prediccion(f.familia_id, *por_familia.get(f.familia_id, (0.0, 0.0)))
-        for f in solicitud.familias
-    ]
+    faltantes = [f.familia_id for f in solicitud.familias if f.familia_id not in por_familia]
+    if faltantes:
+        # Nunca se responde 0 en silencio: un modelo que no cubre una familia es un fallo.
+        log.error("El modelo %s v%s no devolvió %s", modelo.nombre, modelo.version, faltantes)
+        raise ErrorModelo(f"El modelo vigente no devolvió predicción para {', '.join(faltantes)}")
+    return [sanear_prediccion(f.familia_id, *por_familia[f.familia_id]) for f in solicitud.familias]

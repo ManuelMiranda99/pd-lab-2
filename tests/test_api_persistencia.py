@@ -44,8 +44,9 @@ def _obs(fecha: str, ventas: dict[str, object], tienda=1):
 
 
 def test_endpoints_son_sincronos():
-    """Los endpoints son `def`: FastAPI los corre en su pool de hilos y la BD síncrona no
-    bloquea el event loop (solo la lectura del cuerpo es asíncrona)."""
+    """Los endpoints que usan la BD son `def`: FastAPI los corre en su pool de hilos y la BD
+    síncrona no bloquea el event loop. `/health` y `/modelo` solo leen memoria: son `async`
+    para responder aunque el pool esté ocupado con predicciones."""
     from api.routers import admin, prediccion, salud
 
     rutas = [r for m in (admin, prediccion, salud) for r in m.router.routes]
@@ -59,7 +60,8 @@ def test_endpoints_son_sincronos():
     }
     for ruta in rutas:
         assert isinstance(ruta, APIRoute)
-        assert not inspect.iscoroutinefunction(ruta.endpoint), ruta.path
+        es_async = inspect.iscoroutinefunction(ruta.endpoint)
+        assert es_async == (ruta.path in {"/health", "/modelo"}), ruta.path
 
 
 @pytest.mark.parametrize(
@@ -224,12 +226,12 @@ def test_observaciones_idempotentes_e_historial(cliente, url):
     assert primera.status_code == 200, primera.text
     assert ObservacionesResponse(**primera.json()).registros_guardados == 3
 
-    # E09: reenvío idéntico → 0 y estado ok.
+    # E09: reenvío idéntico → 0. D está dentro del histórico sintético: la única observación es el
+    # aviso de que la observación reemplaza al dato publicado (fuera del histórico sería `ok`).
     repetida = cliente.post("/v1/observaciones", json=_obs(D, {f: 100 for f in FAMILIAS}))
-    assert repetida.json() == {
-        "registros_guardados": 0,
-        "calidad": {"estado": "ok", "observaciones": []},
-    }
+    assert repetida.json()["registros_guardados"] == 0
+    assert [o["campo"] for o in repetida.json()["calidad"]["observaciones"]] == ["fecha"]
+    assert "histórico publicado" in repetida.json()["calidad"]["observaciones"][0]["detalle"]
 
     # Corrección de una familia: solo esa cuenta y queda el valor anterior en el historial.
     cambio = cliente.post("/v1/observaciones", json=_obs(D, {"abarrotes": 120}))
@@ -263,12 +265,15 @@ def test_observaciones_invalidas_no_se_guardan(cliente, url):
 def test_observaciones_alimentan_la_prediccion_sin_fuga(cliente):
     base = cliente.post("/v1/prediccion", json=_pred()).json()
 
+    # Valores altos pero plausibles (3× la predicción, bajo el límite de ventas atípicas).
+    altas = {p["familia_id"]: int(p["venta_esperada"] * 3) + 1 for p in base["predicciones"]}
     # La venta del propio día D no cambia la predicción de D…
-    cliente.post("/v1/observaciones", json=_obs(D, {f: 99_999 for f in FAMILIAS}))
+    cliente.post("/v1/observaciones", json=_obs(D, altas))
     assert cliente.post("/v1/prediccion", json=_pred()).json() == base
 
     # …pero una observación anterior (D-7, mismo día de la semana) sí, y gana al histórico.
-    cliente.post("/v1/observaciones", json=_obs("2025-01-20", {f: 50_000 for f in FAMILIAS}))
+    r = cliente.post("/v1/observaciones", json=_obs("2025-01-20", altas))
+    assert r.json()["registros_guardados"] == len(altas)
     despues = cliente.post("/v1/prediccion", json=_pred()).json()
     for antes, ahora in zip(base["predicciones"], despues["predicciones"], strict=True):
         assert ahora["venta_esperada"] > antes["venta_esperada"]

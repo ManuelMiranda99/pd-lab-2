@@ -25,6 +25,8 @@ def mostrar(valor: Any, largo: int = 40) -> str:
         texto = "true" if valor else "false"
     else:
         texto = str(valor)
+    # Defensa: un texto que no se puede codificar en UTF-8 rompería la respuesta (nunca un 500).
+    texto = texto.encode("utf-8", errors="replace").decode("utf-8")
     return texto if len(texto) <= largo else texto[: largo - 1] + "…"
 
 
