@@ -42,13 +42,13 @@ Airflow) · MLflow (servicio `mlflow`, Registry con alias) · Airflow · Docker 
 
 ### Hechos verificados de los datos
 - Histórico 2024-03-01 → 2026-02-28 (730 días, 83 052 filas), sin huecos ni duplicados; 12 familias en todas las tiendas.
-- **Tienda 10** abre 2025-03-15 (351 días) con **rampa de ~4 meses** (379/día la 1.ª semana → ~860 en julio). WAPE peor (0.21).
+- **Tienda 10** abre 2025-03-15 (351 días) con **rampa de ~4 meses** (379/día la 1.ª semana → ~868 en julio). WAPE con baseline 0.249; la peor es la tienda 9 (0.254) — EDA 2026-11-10.
 - **Tienda 7 cerrada** 2024-09-09 → 2024-09-15 (todo en 0): excluir de entrenamiento y de lags.
 - Ceros reales e intermitentes en bebé/mascotas en tiendas express (4, 9, 10).
 - `feriados.csv`: 2024-03-28 → **2026-12-31** (el periodo evaluado cae en mar–dic 2026, posiblemente con huecos).
-- 1-ene y 25-dic **abiertos** (~0.4× y ~0.48×); Semana Santa ~0.85–0.89×.
-- `medio_dia` **sube** ventas: 24-dic 1.63×, 31-dic 2.04× (licores 4–4.8×, carnes 3–3.6×); 26–30 dic ~1.2×; diciembre +25 %, enero −10 %.
-- **Días de pago no están completos en feriados.csv**: día 15 (1.13×), 16 (1.08×), fin de mes (1.14–1.18×) → construir la variable.
+- 1-ene y 25-dic **abiertos** (~0.4× y ~0.48×); Semana Santa 0.89–1.07× según el día.
+- `medio_dia` **sube** ventas: 24-dic 1.96×, 31-dic 2.32× (licores 4.3× y 5.4×, carnes 3–3.6×); 26–30 dic ~1.2×; diciembre ×1.19, enero ×0.91 (factores del EDA: día / mediana del mismo dow ±4 semanas).
+- **Días de pago no están completos en feriados.csv**: día 1 (1.13×), 15 (1.18×), 16 (1.14×), último día (1.19×; el penúltimo no sube) → construir la variable.
 - Feriados locales casi sin efecto salvo Asunción en Guatemala (0.85–0.90×). Cruce `ambito`=`ciudad` **exacto** (Mixco ≠ Guatemala).
 - Tendencia +6–9 % interanual; promoción con efecto monótono (+2.3 % a +6.8 % por producto en log); `en_promocion` 0–19.
 
@@ -123,41 +123,41 @@ supera al aditivo y a la regresión cuantílica directa.
 **Objetivo:** con un modelo **trivial** (baseline), que todo el circuito operativo funcione en Docker.
 Aquí se resuelven los riesgos más caros: Airflow, artefactos de MLflow, dependencias, RAM, arranque.
 
-- [ ] F1.1 `docker-compose.yaml`: `db` (Postgres producto), `mlflow`, `airflow-db`, `airflow-init`
+- [x] F1.1 `docker-compose.yaml`: `db` (Postgres producto), `mlflow`, `airflow-db`, `airflow-init`
       (one-shot, idempotente), componentes de Airflow con **LocalExecutor** (sin Celery/Redis),
       `bootstrap` (one-shot), `api`. Imágenes con **tag exacto**; `restart: unless-stopped`.
-- [ ] F1.2 MLflow: imagen propia (oficial + psycopg2), `--serve-artifacts`,
+- [x] F1.2 MLflow: imagen propia (oficial + psycopg2), `--serve-artifacts`,
       `--artifacts-destination` en volumen, `--default-artifact-root mlflow-artifacts:/`, backend en
       Postgres (BD `mlflow`) o SQLite en volumen; verificar `--allowed-hosts` si la versión lo exige.
       Puerto host **5001** (5000 lo ocupa AirPlay en macOS). No publicar puertos de Postgres.
-- [ ] F1.3 Airflow: `DAGS_ARE_PAUSED_AT_CREATION=false`, `LOAD_EXAMPLES=false`,
+- [x] F1.3 Airflow: `DAGS_ARE_PAUSED_AT_CREATION=false`, `LOAD_EXAMPLES=false`,
       `DAG_DIR_LIST_INTERVAL=30`, auth de API configurada (JWT en 3.x / basic en 2.x), logs en
       volumen nombrado, `AIRFLOW_UID` en `.env.example`, pocos workers del webserver.
-- [ ] F1.4 Montaje de datos `${DATOS_DIR:-./data}:/datos:ro`; `.dockerignore` en **lista blanca**
+- [x] F1.4 Montaje de datos `${DATOS_DIR:-./data}:/datos:ro`; `.dockerignore` en **lista blanca**
       (`*` + `!api/ !src/ !dags/ !docker/ !pyproject.toml !requirements*.txt`).
-- [ ] F1.5 Baseline (media del mismo día de semana, últimas k semanas) empaquetado como **pyfunc**
+- [x] F1.5 Baseline (media del mismo día de semana, últimas k semanas) empaquetado como **pyfunc**
       con `code_paths=[src/novamercado]`; entrada = solicitud limpia + panel de la BD.
-- [ ] F1.6 `bootstrap` idempotente bajo `pg_advisory_lock`: migrar esquema → cargar CSV en **una
+- [x] F1.6 `bootstrap` idempotente bajo `pg_advisory_lock`: migrar esquema → cargar CSV en **una
       transacción** con marcador (hash, filas) → consultar alias: existe → salir; no existe → entrenar
       y registrar v1 con alias `champion`; **MLflow inalcanzable → salir con error, nunca entrenar**;
       versión sin alias → asignar alias en vez de reentrenar. Loader tolera subcarpeta extra y BOM y
       falla con mensaje claro si faltan archivos.
-- [ ] F1.7 API mínima: `/health`, `/modelo`, `/v1/prediccion` con baseline. La API **no** espera al
+- [x] F1.7 API mínima: `/health`, `/modelo`, `/v1/prediccion` con baseline. La API **no** espera al
       bootstrap: arranca con 503 y carga el modelo en cuanto aparece el alias.
-- [ ] F1.8 Carga del modelo: `ModeloCargado` inmutable (pyfunc, nombre, alias, versión); poller en
+- [x] F1.8 Carga del modelo: `ModeloCargado` inmutable (pyfunc, nombre, alias, versión); poller en
       hilo cada 20–30 s; caché atómica en volumen (`tmp` → validar con predicción de humo →
       `os.replace` + `actual.json`); arranque alias → caché → 503. Cliente MLflow con
       `MLFLOW_HTTP_REQUEST_MAX_RETRIES=0..1`, `TIMEOUT=5`. **El camino de predicción nunca llama a MLflow.**
       Un solo worker de uvicorn.
-- [ ] F1.9 DAG `reentrenamiento` trivial (reentrena baseline, mueve alias) con `schedule=None`,
+- [x] F1.9 DAG `reentrenamiento` trivial (reentrena baseline, mueve alias) con `schedule=None`,
       `catchup=False`, `max_active_runs=1`, `dagrun_timeout=9 min`, imports pesados dentro de las
       tareas; entrenamiento en venv aislado con `requirements-ml.txt` (`ExternalPythonOperator`).
-- [ ] F1.10 `POST /admin/reentrenar` (id `uuid4().hex` generado por la API = `dag_run_id`; fila en
+- [x] F1.10 `POST /admin/reentrenar` (id `uuid4().hex` generado por la API = `dag_run_id`; fila en
       `reentrenamientos` antes de disparar; 202 / 503) y `GET /admin/reentrenar/{id}` (404 por BD).
       Encapsular en `AirflowClient`.
-- [ ] F1.11 Medir: arranque en frío hasta `/health` ok, RAM pico (`docker stats`), `stop mlflow`
+- [x] F1.11 Medir: arranque en frío hasta `/health` ok, RAM pico (`docker stats`), `stop mlflow`
       → degradado, `down`/`up` sin `-v` conserva y no reentrena. Anotar números en la bitácora.
-- [ ] F1.12 Job de CI `compose`: `docker compose config`, servicio `mlflow` presente, puerto 8000,
+- [~] F1.12 Job de CI `compose`: `docker compose config`, servicio `mlflow` presente, puerto 8000,
       sin `latest`, hadolint, `docker compose build`. Agregarlo a los checks requeridos.
 
 **Criterio de terminado:** desde un clon limpio + `data/` + `cp .env.example .env` → `docker compose up`
@@ -168,26 +168,26 @@ Aquí se resuelven los riesgos más caros: Airflow, artefactos de MLflow, depend
 ## Fase 2 — Exploración y decisiones de diseño
 **Objetivo:** fijar por escrito las decisiones grandes (los 4 temas obligatorios de DECISIONES.md).
 
-- [ ] F2.1 EDA reproducible en `scripts/` (confirmar los hechos de la sección 0 y graficar los principales).
-- [ ] F2.2 **Información que usa el modelo al predecir** (solo `< D`): calendario (dow, día del mes,
+- [x] F2.1 EDA reproducible en `scripts/` (confirmar los hechos de la sección 0 y graficar los principales).
+- [x] F2.2 **Información que usa el modelo al predecir** (solo `< D`): calendario (dow, día del mes,
       día 15/16/fin de mes, mes), feriados nacional/local por ciudad exacta, eventos especiales
       (24/25/31-dic, 1-ene, Semana Santa, 31-oct, 26–30 dic), promo del día, lags "a la fecha del
       último dato disponible", días desde el último dato, medias móviles, tienda/familia/tipo,
       días desde apertura.
-- [ ] F2.3 **Política de datos**: reglas generales R1–R9 (ver Anexo A) + tabla E01–E10 + no
+- [x] F2.3 **Política de datos**: reglas generales R1–R9 (ver Anexo A) + tabla E01–E10 + no
       catalogados. Decidir: E05 (predecir las 12 con promo 0 y advertir, recomendado), E06 (advertir
       con regla determinista vs rechazar), fechas ambiguas (DD/MM con advertencia), fecha > 2026-12-31
       (advertir), antes de apertura de tienda (rechazar).
-- [ ] F2.4 **Cantidad sugerida**: predicción × cuantil τ del ratio por familia, calibrado fuera de muestra
+- [x] F2.4 **Cantidad sugerida**: predicción × cuantil τ del ratio por familia, calibrado fuera de muestra
       en ventana reciente y recalibrado en cada reentreno; corrección de sesgo de `venta_esperada`
       (smearing o pérdida Poisson/Tweedie).
-- [ ] F2.5 **Criterio de reemplazo**: retador y vigente evaluados en las **mismas** ventanas recientes
+- [x] F2.5 **Criterio de reemplazo**: retador y vigente evaluados en las **mismas** ventanas recientes
       (varias, rolling origin; cuidar 31-dic/1-ene), umbral mínimo de mejora de costo, `motivo` legible
       con ambos costos.
-- [ ] F2.6 Reglas operativas: qué hace `POST /admin/reentrenar` con un run en curso (202 en cola vs 503)
+- [x] F2.6 Reglas operativas: qué hace `POST /admin/reentrenar` con un run en curso (202 en cola vs 503)
       y con MLflow caído (503); qué `en_promocion` se usa para entrenar si hubo varias solicitudes del
       mismo día (la última válida) o ninguna (NULL + flag).
-- [ ] F2.7 Borrador de `DECISIONES.md` con decisión · alternativas · justificación para F2.2–F2.6 y
+- [x] F2.7 Borrador de `DECISIONES.md` con decisión · alternativas · justificación para F2.2–F2.6 y
       F0.14, manejo de datos fuera del repo, CI y flujo por PR.
 
 ---
@@ -196,30 +196,30 @@ Aquí se resuelven los riesgos más caros: Airflow, artefactos de MLflow, depend
 **Objetivo:** módulos puros (sin FastAPI) que convierten cualquier entrada en "solicitud limpia +
 observaciones de calidad" o en un rechazo con motivo.
 
-- [ ] F3.1 Pydantic de **salida** exacto al Anexo (`PrediccionResponse`, `ObservacionesResponse`,
+- [x] F3.1 Pydantic de **salida** exacto al Anexo (`PrediccionResponse`, `ObservacionesResponse`,
       `Calidad`, `ObservacionCalidad`, `ReentrenoStatus`, `ModeloInfo`, `Health`); sin `exclude_none`
       que borre campos obligatorios; `ok` siempre con `"observaciones": []`.
-- [ ] F3.2 Lectura tolerante del cuerpo crudo: BOM, `Content-Type` incorrecto, claves duplicadas en el
+- [x] F3.2 Lectura tolerante del cuerpo crudo: BOM, `Content-Type` incorrecto, claves duplicadas en el
       JSON (`object_pairs_hook`), `NaN`/`Infinity`, booleanos donde va un número (Pydantic lax convierte
       `True` en 1: bloquear), enteros enormes antes de Postgres.
-- [ ] F3.3 Normalizadores generales: ids (`"T05"`, `"5"`, `5.0`, `"Tienda 5"`), familias (NFKC, acentos,
+- [x] F3.3 Normalizadores generales: ids (`"T05"`, `"5"`, `5.0`, `"Tienda 5"`), familias (NFKC, acentos,
       mayúsculas, `_ - y &`, contra id **y** nombre del catálogo; difusa → advertir), enteros (`"3"`,
       `2.0`, `"1,234"`, `"812,0"`; 2.5 → advertir), fechas (ISO con hora, `DD/MM/AAAA`, `AAAA/MM/DD`,
       `AAAAMMDD`, ambigüedad), alias y capitalización de claves.
-- [ ] F3.4 **Tabla declarativa de políticas** en código (problema → acción → mensaje) como única fuente;
+- [x] F3.4 **Tabla declarativa de políticas** en código (problema → acción → mensaje) como única fuente;
       un test verifica que la tabla de DECISIONES.md coincide.
-- [ ] F3.5 Motor de calidad: `campo` con **índice original** y clave recibida; `accion` solo
+- [x] F3.5 Motor de calidad: `campo` con **índice original** y clave recibida; `accion` solo
       `reparar`/`advertir` (rechazo = 422); estado **derivado**: algún advertir → advertencia, solo
       reparar → corregido, nada → ok. Campos extra se ignoran sin observación.
-- [ ] F3.6 Fechas sin reloj del sistema: rango `[2024-03-01, máx(feriados)]` + advertencia fuera de
+- [x] F3.6 Fechas sin reloj del sistema: rango `[2024-03-01, máx(feriados)]` + advertencia fuera de
       cobertura; **no** rechazar fechas pasadas (el ejemplo del Anexo, 2025-11-17, está dentro del
       histórico); tienda antes de su apertura.
-- [ ] F3.7 Observaciones: negativos (E08 → advertir y no guardar la familia), formato numérico (E10),
+- [x] F3.7 Observaciones: negativos (E08 → advertir y no guardar la familia), formato numérico (E10),
       decimales no enteros, duplicados (idénticos → reparar; distintos → no guardar y advertir),
       familias faltantes (guardar las recibidas y advertir), familias desconocidas.
-- [ ] F3.8 Fixtures **propias** en `tests/fixtures/` (sin copiar el material publicado) + generador
+- [x] F3.8 Fixtures **propias** en `tests/fixtures/` (sin copiar el material publicado) + generador
       `novamercado.sintetico`; tests extra sobre `data/ejemplos/` con `skip` si no existe.
-- [ ] F3.9 pytest: E01–E10 + ≥ 25 casos no catalogados (Anexo A) + propiedades del contrato
+- [x] F3.9 pytest: E01–E10 + ≥ 25 casos no catalogados (Anexo A) + propiedades del contrato
       (int ≥ 0, finitos, versión texto, estado coherente). Nada depende de MLflow ni de la BD.
 
 **Criterio de terminado:** `pytest tests/test_contrato* tests/test_limpieza*` verde en CI.
@@ -413,6 +413,8 @@ observaciones de calidad" o en un rechazo con motivo.
   `AIRFLOW__CORE__EXECUTION_API_SERVER_URL` configurados. Misma versión en imagen y CI (constraints 3.11).
 - **Huecos en el periodo evaluado**: el modelo debe tolerar lags faltantes (F5.1, F5.6).
 - **Diciembre 2026** (24/31-dic hasta 4.8× en licores) es el mayor riesgo de costo si se evalúa (F2.2).
-- **RAM del stack** ~3–4 GB pico con LocalExecutor; con Celery > 6 GB (F1.11).
+- ~~RAM del stack~~ → **medido: 1.9 GB pico** con LocalExecutor y jobs de MLflow desactivados (F1.11, DECISIONES §5.5).
+- **Reentreno con uno en curso**: la Fase 1 responde 202 y encola un run nuevo; DECISIONES §6.1 dice 202 con el id del run en curso. Unificar en F6.3.
+- **Criterio de promoción provisional** (empate promueve, DECISIONES §5.10): reemplazar por §4 en F5.8.
 - **Checks requeridos progresivos**: agregar a la protección solo los jobs que ya existen.
 - ~~Protección de rama en repo privado~~ → **resuelto**: el repo `pd-lab-2` es público y `main` quedó protegida (F0.12).

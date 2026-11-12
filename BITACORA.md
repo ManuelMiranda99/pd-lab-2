@@ -94,3 +94,59 @@
 - Tener en cuenta: en Airflow 3 configurar `AIRFLOW__API_AUTH__JWT_SECRET` y
   `AIRFLOW__CORE__EXECUTION_API_SERVER_URL`; medir RAM pico (objetivo ≤ 6 GB); el venv del DAG usa
   `requirements-ml.txt` (sin constraints de Airflow).
+
+---
+
+## Sesión 2026-11-10 — Fases 1, 2 y 3 (inicio)
+**Fase:** 1 — Esqueleto operativo · 2 — Exploración y decisiones · 3 — Contrato y limpieza
+**Estado al cerrar:** Fase 2 y Fase 3 cerradas ✅ · Fase 1: 11 de 12 (falta que el job `compose` corra en GitHub y sea check requerido)
+
+Trabajo delegado en paralelo a tres agentes, cada uno en su worktree y rama (`feat/esqueleto-operativo`,
+`docs/decisiones-eda`, `feat/contrato-limpieza`); revisión e integración en la sesión principal.
+
+### Logrado
+- **Fase 1** — `docker-compose.yaml` (`db`, `mlflow`, `airflow-db`, `airflow-init`, `airflow-apiserver`,
+  `airflow-scheduler`, `airflow-dag-processor`, `bootstrap`, `api`; tags exactos, LocalExecutor),
+  `docker/{app,airflow,mlflow}`, `.dockerignore` en lista blanca, `.env.example` completo.
+  Bootstrap idempotente con `pg_advisory_lock`; baseline (media del mismo dow, k=4) como pyfunc;
+  `ModeloCargado` + poller + caché atómica; DAG `reentrenamiento` con `ExternalPythonOperator`;
+  `/health`, `/modelo`, `/v1/prediccion` (esquemas provisionales), `POST/GET /admin/reentrenar`;
+  job de CI `compose` (config, mlflow, 8000, sin `latest`, hadolint, build).
+- **Fase 2** — `scripts/eda.py` (9 gráficas en `evidencia/eda/`), `scripts/backtest_cantidad.py`,
+  `scripts/comun_datos.py`; DECISIONES §2, §3, §4 y §6; `matplotlib==3.11.2` en dev.
+- **Fase 3** — `contrato/{entrada,salida}.py`, `limpieza/{lectura,normalizadores,catalogo,politicas,
+  calidad,solicitudes}.py` (43 códigos en la tabla declarativa), fixtures propias, DECISIONES §1.
+
+### Verificación
+- pytest por rama: Fase 1 64 pasan con Postgres (55 + 9 omitidas sin BD); Fase 2 4 pasan; Fase 3 607 pasan
+  (con `DATOS_DIR`, incluidos los ejemplos publicados).
+- Las tres ramas combinadas en un worktree de prueba: sin conflictos de archivos, **662 pasan, 9 omitidas**
+  (integración sin Postgres); ruff limpio. Sin `datetime.now`/`date.today` en `src/`.
+- Docker (8 GB, 10 CPU): arranque en frío → `/health` ok ~40 s; bootstrap 8.5 s; reentreno ~9 s;
+  modelo promovido en uso 7–9 s; `stop mlflow` → degradado 4–8 s; vuelta a ok 9 s; `down`/`up` sin `-v`
+  ok en 28 s sin reentrenar (carga desde caché); predicción 90 ms; RAM pico 1.9 GB.
+  Con MLflow caído: predicción 200, reentreno 503; reentreno que falla no mueve `champion`.
+- Backtest (ene–feb 2026): baseline+cuantil 310 576 vs HGB Poisson+cuantil 179 224 (−42 %).
+
+### Decisiones tomadas
+- Política de datos (E05, E06 última aparición, fechas DD/MM, rango derivado de los datos) → §1.
+- Información del modelo → §2; cantidad sugerida `ceil(pred × q_f)` y pérdida Poisson → §3;
+  criterio de reemplazo (≥ 0.5 %, mayoría de ventanas, mejor que baseline) → §4; reglas operativas → §6.
+- Backend MLflow en Postgres del producto, jobs GenAI desactivados, FAB+JWT, imagen única, entrada del
+  pyfunc con `rol` (observación gana al histórico), arranque y salud, criterio provisional → §5.4–5.10.
+- El EDA corrigió hechos de la sección 0 del PLAN (24/31-dic, días de pago, Semana Santa, peor WAPE).
+
+### Pendientes / bloqueos
+- F1.12: que el job `compose` corra en GitHub y agregarlo a los checks requeridos de `main`.
+- Reentreno con uno en curso: Fase 1 encola un run nuevo vs §6.1 (id del run en curso) → unificar en F6.3.
+- Criterio de promoción provisional (empate promueve) → reemplazar en F5.8.
+- Fila `en_curso` huérfana si Airflow no vuelve (timeout de F6.3). `/v1/prediccion` aún no persiste (F4.1/F4.2).
+- Umbral de 0.5 % apoyado en una sola comparación (sin bootstrap por días).
+
+### Próxima sesión
+- Empezar por: fusionar los PR de las tres ramas (orden: contrato-limpieza → decisiones-eda →
+  esqueleto-operativo, resolviendo `DECISIONES.md` al rebasar) y agregar `compose` a los checks requeridos.
+- Luego: **Fase 4** — F4.1/F4.2 conectar `procesar_prediccion`/`procesar_observaciones` en los routers
+  (leer `await request.body()` sin mirar `Content-Type`), reemplazar `api/esquemas_provisionales.py`
+  por `novamercado.contrato` y persistir solicitudes, predicciones y correcciones.
+- Tener en cuenta: `code_paths` hace que MLflow recargue `novamercado` desde la copia del modelo.
