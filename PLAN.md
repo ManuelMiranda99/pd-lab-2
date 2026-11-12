@@ -318,17 +318,17 @@ observaciones de calidad" o en un rechazo con motivo.
 ---
 
 ## Fase 8 — Documentación, evidencia y entrega
-- [ ] F8.1 `README.md`: requisitos (Docker ≥ 6 GB), **carpeta donde colocar los archivos publicados**,
+- [x] F8.1 `README.md`: requisitos (Docker ≥ 6 GB), **carpeta donde colocar los archivos publicados**,
       `cp .env.example .env` (funciona sin editar), `docker compose up`, URLs (API 8000, MLflow 5001,
       Airflow 8080), cómo verificar y reentrenar.
-- [ ] F8.2 `DECISIONES.md` final: política por tipo de problema · información que usa el modelo ·
+- [x] F8.2 `DECISIONES.md` final: política por tipo de problema · información que usa el modelo ·
       cantidad sugerida · criterio de reemplazo · stack, Airflow, datos fuera del repo, CI, flujo por PR.
-- [ ] F8.3 `CLAUDE.md` actualizado con el estado final.
-- [ ] F8.4 Evidencia en `evidencia/`: experimentos y versiones en MLflow, ejecuciones del DAG (promoción
+- [x] F8.3 `CLAUDE.md` actualizado con el estado final.
+- [x] F8.4 Evidencia en `evidencia/`: experimentos y versiones en MLflow, ejecuciones del DAG (promoción
       y no-promoción), respuestas de la API válidas y defectuosas (E01–E10 + no catalogadas).
-- [ ] F8.5 **Auditoría de datos y credenciales** (vacío):
+- [x] F8.5 **Auditoría de datos y credenciales** (vacío):
       `git log --all --name-only | grep -E '\.csv$|\.pdf$|(^|/)\.env$|^data/'`.
-- [ ] F8.6 Repo accesible al equipo docente.
+- [x] F8.6 Repo accesible al equipo docente.
 - [ ] F8.7 Ensayo final: `git clone --branch entrega-lab2` en carpeta nueva y levantar.
 - [ ] F8.8 `git tag -a entrega-lab2` sobre `main` tras el último squash, **antes de la fecha límite**;
       `git push origin entrega-lab2`; verificar con `gh api …/git/refs/tags/entrega-lab2`.

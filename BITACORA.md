@@ -343,3 +343,53 @@ Toda la fase en la rama `feat/smoke-simulador` → PR #12 (squash, CI verde con 
   auditoría de datos y credenciales, F8.2/F8.3.
 - Tener en cuenta: el tag `entrega-lab2` (F8.8) antes de la fecha límite; el job `smoke` corre en el
   tag.
+
+---
+
+## Sesión 2026-11-12 — Fase 8 (inicio)
+**Fase:** 8 — Documentación, evidencia y entrega
+**Estado al cerrar:** 6 de 10 · quedan el tag, el ensayo con el tag, el GES y el repaso
+**Plan del día:** F8.1, F8.4, F8.5, F8.2, F8.3 (toda la fase salvo el tag, que se hace en otra sesión)
+
+Rama `docs/readme-evidencia-entrega`.
+
+### Logrado
+- Limpieza local: borradas las ramas `docs/cierre-fase-4` (PR #8 cerrado; su contenido ya estaba
+  en `main`), `feat/modelo-ml` (squash en #9) y tres `worktree-agent-*` sin commits propios.
+- F8.1 `README.md` completo: tabla de servicios y URLs, carpeta `data/` con la lista de archivos,
+  `cp .env.example .env`, qué hace el arranque en frío y cuánto tarda, verificación con `curl`,
+  reentrenamiento y consulta de estado, `down` sin `-v`, resiliencia, estructura y desarrollo.
+- F8.2 `DECISIONES.md`: tabla resumen de los cuatro temas al inicio, CI con sus cuatro jobs (§5.3),
+  limitación conocida tras un choque (§4.4) y uso de IA visible (§5.13).
+- F8.3 `CLAUDE.md`: sección "Estado" y estructura al día.
+- F8.4 `scripts/evidencia.py` → `evidencia/evidencia.md` (+ `api/`, `mlflow/`, `airflow/`,
+  `reentrenamiento/`) y `evidencia/README.md` como índice contra lo que pide el enunciado.
+  Corrida en un proyecto aparte con los datos reales: `ok` a los 65 s; 36/36 casos de API como se
+  esperaba (E01–E10 y 21 no catalogados), 0 problemas de contrato; reentreno sin datos nuevos →
+  `exitoso` sin promover (24 s); 14 días con +25 % → promueve v3 (−1.8 %), en uso a los 12 s;
+  MLflow caído → `degradado` en 3 s, predicción 200, reentrenar 503, `ok` 9 s tras el `start`.
+- F8.5 Auditoría vacía: ni `.csv`, `.pdf`, `.env` ni `data/` en todo el historial; sin patrones de
+  secretos; las tres imágenes no contienen CSV ni `.env` (`.dockerignore` en lista blanca).
+- F8.6 Repo público (`ManuelMiranda99/pd-lab-2`).
+
+### Verificación
+- pytest: 893 pasan y 41 se omiten sin BD; ruff limpio.
+- Stack principal restaurado con v1 y sin datos de prueba; el proyecto `novamercado-evidencia`
+  se borró al terminar.
+
+### Decisiones tomadas
+- Evidencia generada por script y en proyecto aparte, con solicitudes construidas (no se copian
+  los ejemplos publicados) → DECISIONES §5.12.
+
+### Pendientes / bloqueos
+- Primera corrida de evidencia: un caso E10 mal armado en el script (dos formatos sobre la misma
+  familia → `"1,309,0"`, que el servicio advierte con razón) y `model-versions/search` es GET en
+  MLflow. Corregido y repetido desde cero.
+- Queda en GitHub la rama remota `docs/cierre-fase-4` (PR #8 cerrado); borrarla es opcional.
+
+### Próxima sesión
+- Empezar por: mergear el PR de esta rama; luego **F8.8** `git tag -a entrega-lab2` sobre `main`
+  y `git push origin entrega-lab2` (verificar con `gh api …/git/refs/tags/entrega-lab2` y que el
+  job `smoke` del tag quede en verde).
+- Luego: F8.7 ensayo con `git clone --branch entrega-lab2` en carpeta nueva, F8.9 enlace en el
+  GES y F8.10 repaso.

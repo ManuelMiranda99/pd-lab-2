@@ -1,0 +1,201 @@
+{
+  "arranque": {
+    "segundos_hasta_ok": 65,
+    "modelo": {
+      "nombre": "novamercado",
+      "alias": "champion",
+      "version": "1"
+    },
+    "health": {
+      "estado": "ok",
+      "componentes": {
+        "base_de_datos": true,
+        "mlflow": true,
+        "airflow": true,
+        "modelo": true
+      },
+      "version_modelo": "1"
+    }
+  },
+  "reentrenos": [
+    {
+      "etiqueta": "Sin datos nuevos → no se promueve",
+      "post": {
+        "http": 202,
+        "respuesta": {
+          "id": "7387a3fc05404976b06fd05aee37bb2c"
+        }
+      },
+      "modelo_antes": {
+        "nombre": "novamercado",
+        "alias": "champion",
+        "version": "1"
+      },
+      "segundos": 24.3,
+      "estado": {
+        "estado": "exitoso",
+        "promovido": false,
+        "version": "1",
+        "motivo": "Solo 0 días evaluables después del corte del vigente (mínimo 7): se conserva el vigente"
+      },
+      "contrato_ok": true,
+      "modelo_despues": {
+        "nombre": "novamercado",
+        "alias": "champion",
+        "version": "1"
+      }
+    },
+    {
+      "etiqueta": "14 días con demanda +25 % → se promueve",
+      "post": {
+        "http": 202,
+        "respuesta": {
+          "id": "518816a0ce144b1ea91fa2c278ee6a81"
+        }
+      },
+      "modelo_antes": {
+        "nombre": "novamercado",
+        "alias": "champion",
+        "version": "1"
+      },
+      "segundos": 39.4,
+      "estado": {
+        "estado": "exitoso",
+        "promovido": true,
+        "version": "3",
+        "motivo": "Costo en validación 46 296 vs 47 167 del vigente (−1.8 %, gana 1/2 ventanas): promovido"
+      },
+      "contrato_ok": true,
+      "segundos_hasta_en_uso": 12.2,
+      "modelo_despues": {
+        "nombre": "novamercado",
+        "alias": "champion",
+        "version": "3"
+      }
+    }
+  ],
+  "caida_mlflow": [
+    {
+      "paso": "GET /health tras stop mlflow",
+      "http": 200,
+      "respuesta": {
+        "estado": "degradado",
+        "motivo": "No disponible: mlflow",
+        "componentes": {
+          "base_de_datos": true,
+          "mlflow": false,
+          "airflow": true,
+          "modelo": true
+        },
+        "version_modelo": "3"
+      },
+      "segundos": 3.0600903749946156
+    },
+    {
+      "paso": "POST /v1/prediccion con MLflow caído",
+      "http": 200,
+      "respuesta": {
+        "tienda_id": 5,
+        "fecha": "2026-03-01",
+        "version_modelo": "3",
+        "predicciones": [
+          {
+            "familia_id": "abarrotes",
+            "venta_esperada": 1658.54,
+            "cantidad_sugerida": 2141
+          },
+          {
+            "familia_id": "bebe",
+            "venta_esperada": 113.14,
+            "cantidad_sugerida": 150
+          },
+          {
+            "familia_id": "bebidas",
+            "venta_esperada": 1758.38,
+            "cantidad_sugerida": 2266
+          },
+          {
+            "familia_id": "carnes",
+            "venta_esperada": 418.86,
+            "cantidad_sugerida": 432
+          },
+          {
+            "familia_id": "cuidado_personal",
+            "venta_esperada": 280.62,
+            "cantidad_sugerida": 369
+          },
+          {
+            "familia_id": "frutas_verduras",
+            "venta_esperada": 524.14,
+            "cantidad_sugerida": 506
+          },
+          {
+            "familia_id": "lacteos",
+            "venta_esperada": 832.72,
+            "cantidad_sugerida": 882
+          },
+          {
+            "familia_id": "licores",
+            "venta_esperada": 124.48,
+            "cantidad_sugerida": 177
+          },
+          {
+            "familia_id": "limpieza",
+            "venta_esperada": 348.37,
+            "cantidad_sugerida": 457
+          },
+          {
+            "familia_id": "mascotas",
+            "venta_esperada": 76.3,
+            "cantidad_sugerida": 101
+          },
+          {
+            "familia_id": "panaderia",
+            "venta_esperada": 473.85,
+            "cantidad_sugerida": 434
+          },
+          {
+            "familia_id": "snacks",
+            "venta_esperada": 560.07,
+            "cantidad_sugerida": 711
+          }
+        ],
+        "calidad": {
+          "estado": "ok",
+          "observaciones": []
+        }
+      }
+    },
+    {
+      "paso": "GET /modelo con MLflow caído",
+      "http": 200,
+      "respuesta": {
+        "nombre": "novamercado",
+        "alias": "champion",
+        "version": "3"
+      }
+    },
+    {
+      "paso": "POST /admin/reentrenar con MLflow caído",
+      "http": 503,
+      "respuesta": {
+        "detail": "MLflow no disponible: no se puede reentrenar"
+      }
+    },
+    {
+      "paso": "GET /health tras start mlflow",
+      "http": 200,
+      "respuesta": {
+        "estado": "ok",
+        "componentes": {
+          "base_de_datos": true,
+          "mlflow": true,
+          "airflow": true,
+          "modelo": true
+        },
+        "version_modelo": "3"
+      },
+      "segundos": 9.112810083002842
+    }
+  ]
+}
