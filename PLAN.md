@@ -303,7 +303,8 @@ observaciones de calidad" o en un rechazo con motivo.
 
 - [x] F7.1 `scripts/smoke.py`: health ≤ 10 min, contrato, E01 sintético, 422, idempotencia, reentreno
       ≤ 10 min, id inventado → 404, `stop/start mlflow`.
-- [~] F7.2 Job `smoke` en CI con datos **sintéticos** (en main, tag y PRs con etiqueta; luego requerido).
+- [x] F7.2 Job `smoke` en CI con datos **sintéticos** (en main, tag y PRs con etiqueta; luego requerido).
+      _(verde en el PR de la fase; requerido en `main` — se omite en PRs sin etiqueta)_
 - [x] F7.3 `scripts/simulador.py` sin fuga: bootstrap con **histórico truncado** (variable de entorno)
       y simular los días retenidos: observaciones de ayer → solicitudes de hoy de 10 tiendas, errores
       aleatorios (catálogo + inventados), solicitudes repetidas.
