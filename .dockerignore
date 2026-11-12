@@ -1,0 +1,12 @@
+# Lista blanca: al contexto de build solo entra el código. Datos, .env, .git y artefactos quedan
+# fuera de las imágenes por construcción.
+*
+!api/
+!src/
+!dags/
+!docker/
+!pyproject.toml
+!requirements*.txt
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info

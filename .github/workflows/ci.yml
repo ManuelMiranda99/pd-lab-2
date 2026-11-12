@@ -66,3 +66,53 @@ jobs:
 
       - name: Pytest
         run: pytest
+
+  compose:
+    name: compose
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configuración de Compose válida (con .env.example sin editar)
+        run: |
+          cp .env.example .env
+          docker compose config -q
+          docker compose config --format json > /tmp/compose.json
+
+      - name: Servicio mlflow, API en 8000, sin puertos de Postgres y sin 'latest'
+        shell: python3 {0}
+        run: |
+          import glob, json, re, sys
+          s = json.load(open("/tmp/compose.json"))["services"]
+          errores = []
+          if "mlflow" not in s:
+              errores.append("falta el servicio 'mlflow'")
+          api = s.get("api", {}).get("ports", [])
+          if not any(str(p.get("published")) == "8000" and p.get("target") == 8000 for p in api):
+              errores.append("la API debe publicar 8000:8000")
+          for nombre in ("db", "airflow-db"):
+              if s.get(nombre, {}).get("ports"):
+                  errores.append(f"'{nombre}' no debe publicar puertos")
+          imagenes = {n: v.get("image", "") for n, v in s.items()}
+          for f in glob.glob("docker/*/Dockerfile"):
+              for linea in open(f):
+                  if linea.startswith("FROM "):
+                      imagenes[f] = linea.split()[1]
+          for origen, img in imagenes.items():
+              tag = img.rsplit("/", 1)[-1].partition(":")[2]
+              if not re.search(r"\d", tag) or "latest" in tag:
+                  errores.append(f"{origen}: imagen sin versión fija ({img!r})")
+          if errores:
+              print("\n".join(errores))
+              sys.exit(1)
+          print("compose OK:", ", ".join(sorted(s)))
+
+      - name: Hadolint
+        run: |
+          for f in docker/*/Dockerfile; do
+            echo "== $f"
+            docker run --rm -i hadolint/hadolint:v2.14.0 hadolint --failure-threshold warning - < "$f"
+          done
+
+      - name: Build de las imágenes
+        run: docker compose build

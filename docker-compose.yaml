@@ -1,0 +1,230 @@
+# NovaMercado: API + Postgres del producto + MLflow + Airflow 3.3.2 (LocalExecutor).
+#   cp .env.example .env && docker compose up
+#   API http://localhost:8000 · MLflow http://localhost:5001 · Airflow http://localhost:8080
+# Los datos se montan en /datos (solo lectura); las credenciales llegan desde .env.
+# `docker compose down` conserva los volúmenes (nunca usar -v si se quiere conservar el estado).
+name: novamercado
+
+x-producto-env: &producto-env
+  NOVAMERCADO_DB_URL: postgresql://${POSTGRES_USER:-novamercado}:${POSTGRES_PASSWORD:-novamercado}@db:5432/${POSTGRES_DB:-novamercado}
+  MLFLOW_TRACKING_URI: http://mlflow:5000
+  MODELO_NOMBRE: ${MODELO_NOMBRE:-novamercado}
+  MODELO_ALIAS: ${MODELO_ALIAS:-champion}
+  CRITERIO_MEJORA_MINIMA: ${CRITERIO_MEJORA_MINIMA:-0}
+  MLFLOW_HTTP_REQUEST_MAX_RETRIES: "0"
+  MLFLOW_HTTP_REQUEST_TIMEOUT: "5"
+  # Sin git en las imágenes: MLflow no debe advertir al registrar el commit.
+  GIT_PYTHON_REFRESH: quiet
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: docker/airflow/Dockerfile
+  image: novamercado/airflow:3.3.2-0.1.0
+  environment: &airflow-env
+    <<: *producto-env
+    # El entrenamiento sube artefactos: algo más de margen que el cliente de la API.
+    MLFLOW_HTTP_REQUEST_TIMEOUT: "60"
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER:-airflow}:${AIRFLOW_DB_PASSWORD:-airflow}@airflow-db:5432/airflow
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-novamercado-jwt-local}
+    AIRFLOW__API_AUTH__JWT_ISSUER: novamercado
+    AIRFLOW__API__SECRET_KEY: ${AIRFLOW_API_SECRET_KEY:-novamercado-api-local}
+    AIRFLOW__API__WORKERS: "1"
+    AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: "30"
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    NOVAMERCADO_PYTHON_ML: /opt/venv-ml/bin/python
+  volumes:
+    - airflow-logs:/opt/airflow/logs
+  user: "${AIRFLOW_UID:-50000}:0"
+  restart: unless-stopped
+  depends_on: &airflow-depends
+    airflow-db:
+      condition: service_healthy
+    db:
+      condition: service_healthy
+
+services:
+  # --- Producto ---------------------------------------------------------------------------------
+  db:
+    image: postgres:17.6
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-novamercado}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-novamercado}
+      POSTGRES_DB: ${POSTGRES_DB:-novamercado}
+    volumes:
+      - db-datos:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: docker/mlflow/Dockerfile
+    image: novamercado/mlflow:3.18.0-0.1.0
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-novamercado}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-novamercado}
+      POSTGRES_HOST: db
+      MLFLOW_DB: mlflow
+      # Sin el ejecutor de jobs de GenAI (huey): no se usa y consume ~2 GB de RAM.
+      MLFLOW_SERVER_ENABLE_JOB_EXECUTION: "false"
+    volumes:
+      - mlflow-artefactos:/mlflow/artefactos
+    ports:
+      - "5001:5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  bootstrap:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    image: novamercado/app:0.1.0
+    command: ["python", "-m", "novamercado.bootstrap"]
+    environment:
+      <<: *producto-env
+      DATOS_RUTA: /datos
+      ESPERA_MLFLOW_SEGUNDOS: "300"
+    volumes:
+      - ${DATOS_DIR:-./data}:/datos:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
+    restart: "on-failure:3"
+
+  api:
+    image: novamercado/app:0.1.0
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    environment:
+      <<: *producto-env
+      CACHE_MODELO_DIR: /var/cache/novamercado
+      POLL_MODELO_SEGUNDOS: ${POLL_MODELO_SEGUNDOS:-20}
+      SALUD_SEGUNDOS: ${SALUD_SEGUNDOS:-10}
+      AIRFLOW_URL: http://airflow-apiserver:8080
+      AIRFLOW_USUARIO: ${AIRFLOW_ADMIN_USUARIO:-airflow}
+      AIRFLOW_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-airflow}
+      AIRFLOW_DAG_ID: reentrenamiento
+    volumes:
+      - modelo-cache:/var/cache/novamercado
+    ports:
+      - "8000:8000"
+    healthcheck:
+      # 200 = ok o degradado (responde); 503 = aún sin modelo.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 600s
+    # No espera al bootstrap: arranca con 503 y carga el modelo en cuanto aparece el alias.
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # --- Airflow (BD propia, separada de la del producto) -----------------------------------------
+  airflow-db:
+    image: postgres:17.6
+    environment:
+      POSTGRES_USER: ${AIRFLOW_DB_USER:-airflow}
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD:-airflow}
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-db-datos:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /opt/airflow/logs
+        chown -R "${AIRFLOW_UID:-50000}:0" /opt/airflow/logs
+        # Migra la BD y crea el usuario (idempotente), igual que el compose oficial.
+        exec /entrypoint airflow version
+    environment:
+      <<: *airflow-env
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USUARIO:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-airflow}
+    user: "0:0"
+    restart: "no"
+
+  airflow-apiserver:
+    <<: *airflow-common
+    command: api-server
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 20s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+
+volumes:
+  db-datos:
+  mlflow-artefactos:
+  modelo-cache:
+  airflow-db-datos:
+  airflow-logs:

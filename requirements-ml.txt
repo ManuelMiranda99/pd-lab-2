@@ -5,3 +5,5 @@ pandas==3.1.1
 pyarrow==26.0.1
 scikit-learn==1.9.1
 mlflow-skinny==3.18.0
+# Lectura de la BD del producto (bootstrap, DAG y API).
+psycopg[binary]==3.3.8
