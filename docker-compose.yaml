@@ -10,7 +10,7 @@ x-producto-env: &producto-env
   MLFLOW_TRACKING_URI: http://mlflow:5000
   MODELO_NOMBRE: ${MODELO_NOMBRE:-novamercado}
   MODELO_ALIAS: ${MODELO_ALIAS:-champion}
-  CRITERIO_MEJORA_MINIMA: ${CRITERIO_MEJORA_MINIMA:-0}
+  CRITERIO_MEJORA_MINIMA: ${CRITERIO_MEJORA_MINIMA:-0.005}
   MLFLOW_HTTP_REQUEST_MAX_RETRIES: "0"
   MLFLOW_HTTP_REQUEST_TIMEOUT: "5"
   # Sin git en las imágenes: MLflow no debe advertir al registrar el commit.

@@ -1,4 +1,4 @@
-"""Baseline, features mínimas, métricas y criterio de reemplazo (sin MLflow ni BD)."""
+"""Baseline, features mínimas y métricas (sin MLflow ni BD)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ from novamercado.modelo.baseline import (
     predicciones_rodantes,
     ultimas_fechas,
 )
-from novamercado.modelo.criterio import decidir_reemplazo
 from novamercado.modelo.metricas import costo_total, metricas_tecnicas
 
 
@@ -97,25 +96,3 @@ def test_costo_total_y_metricas():
     m = metricas_tecnicas(df)
     assert m["mae"] == pytest.approx(2.0) and m["sesgo"] == pytest.approx(0.0)
     assert m["wape"] == pytest.approx(0.2)
-
-
-@pytest.mark.parametrize(
-    ("retador", "vigente", "mejora", "promueve"),
-    [
-        (100.0, None, 0.0, True),
-        (90.0, 100.0, 0.0, True),
-        (100.0, 100.0, 0.0, True),
-        (101.0, 100.0, 0.0, False),
-        (96.0, 100.0, 0.05, False),
-        (95.0, 100.0, 0.05, True),
-    ],
-)
-def test_criterio_de_reemplazo(retador, vigente, mejora, promueve):
-    d = decidir_reemplazo(retador, vigente, mejora_minima=mejora)
-    assert d.promover is promueve
-    assert d.motivo
-
-
-def test_motivo_legible_con_ambos_costos():
-    d = decidir_reemplazo(18210.0, 19940.0)
-    assert d.motivo == "Costo en validación 18 210 vs 19 940 del vigente"

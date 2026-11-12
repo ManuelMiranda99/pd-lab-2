@@ -202,3 +202,9 @@ Toda la fase en una pasada, en la rama `feat/api-persistencia` → PR #7 (squash
 - Tener en cuenta: el pyfunc recibe `rol` (§5.8) y `code_paths` recarga `novamercado`; usar
   `predicciones.promocion_explicita` para el `en_promocion` de entrenamiento (§6.3).
 
+---
+
+## Sesión 2026-11-11 — Fase 5 (inicio)
+**Fase:** 5 — Modelo ML, cantidad sugerida y criterio de reemplazo
+**Estado al cerrar:** _(sesión abierta)_
+**Plan del día:** F5.1, F5.2, F5.3, F5.4, F5.5

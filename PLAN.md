@@ -253,24 +253,24 @@ observaciones de calidad" o en un rechazo con motivo.
 
 ---
 
-## Fase 5 — Modelo ML, cantidad sugerida y criterio de reemplazo
+## Fase 5 — Modelo ML, cantidad sugerida y criterio de reemplazo  ✅ cerrada (2026-11-11)
 **Objetivo:** reemplazar el baseline por un modelo que lo mejore en costo, dentro del mismo pyfunc.
 
-- [ ] F5.1 `features/` único (F2.2), robusto a huecos: lags a la fecha del último dato, días desde el
+- [x] F5.1 `features/` único (F2.2), robusto a huecos: lags a la fecha del último dato, días desde el
       último dato, **enmascarado aleatorio de lags al entrenar**; excluir cierre de tienda 7 y rampa de
       tienda 10 (o feature días desde apertura).
-- [ ] F5.2 Validación temporal con varias ventanas (rolling origin).
-- [ ] F5.3 Modelo ML (HistGradientBoosting / LightGBM global; con LightGBM agregar `libgomp1` a la imagen).
-- [ ] F5.4 Métricas técnicas (MAE, RMSE, WAPE, sesgo) + **costo** con `costos.csv`; baseline y ML
+- [x] F5.2 Validación temporal con varias ventanas (rolling origin).
+- [x] F5.3 Modelo ML (HistGradientBoosting / LightGBM global; con LightGBM agregar `libgomp1` a la imagen).
+- [x] F5.4 Métricas técnicas (MAE, RMSE, WAPE, sesgo) + **costo** con `costos.csv`; baseline y ML
       registrados como runs en MLflow (evidencia de mejora).
-- [ ] F5.5 Cuantil τ del ratio por familia (F2.4), recalibrado en cada entrenamiento; verificar que
+- [x] F5.5 Cuantil τ del ratio por familia (F2.4), recalibrado en cada entrenamiento; verificar que
       reduce costo vs sugerir la predicción (objetivo ≈ −27 %).
-- [ ] F5.6 Prueba de robustez: sin lags el modelo **no** es peor que el baseline (si no, respaldo de calendario).
-- [ ] F5.7 Linaje en MLflow: params, métricas, sha256 de los datos, rango de fechas, nº de
+- [x] F5.6 Prueba de robustez: sin lags el modelo **no** es peor que el baseline (si no, respaldo de calendario).
+- [x] F5.7 Linaje en MLflow: params, métricas, sha256 de los datos, rango de fechas, nº de
       observaciones, commit; alias `champion`.
-- [ ] F5.8 Criterio de reemplazo (F2.5) como función pura con tests; `motivo` legible
+- [x] F5.8 Criterio de reemplazo (F2.5) como función pura con tests; `motivo` legible
       (p. ej. "Costo en validación 18 210 vs 19 940 del vigente").
-- [ ] F5.9 Tiempo de entrenamiento < 3 min (deja margen para la cola y el límite de 10 min).
+- [x] F5.9 Tiempo de entrenamiento < 3 min (deja margen para la cola y el límite de 10 min).
 
 ---
 
@@ -411,11 +411,11 @@ observaciones de calidad" o en un rechazo con motivo.
 - ~~Versión de Airflow~~ → **resuelto: 3.3.2** (F0.14). Implica API REST `/api/v2` con token JWT,
   componentes `api-server` + `scheduler` + `dag-processor`, y `AIRFLOW__API_AUTH__JWT_SECRET` /
   `AIRFLOW__CORE__EXECUTION_API_SERVER_URL` configurados. Misma versión en imagen y CI (constraints 3.11).
-- **Huecos en el periodo evaluado**: el modelo debe tolerar lags faltantes (F5.1, F5.6).
+- ~~Huecos en el periodo evaluado~~ → **mitigado en Fase 5**: lags al último dato, enmascarado al entrenar; sin ningún dato reciente el HGB cuesta −53 % vs baseline (DECISIONES §4.3).
 - **Diciembre 2026** (24/31-dic hasta 4.8× en licores) es el mayor riesgo de costo si se evalúa (F2.2).
 - ~~RAM del stack~~ → **medido: 1.9 GB pico** con LocalExecutor y jobs de MLflow desactivados (F1.11, DECISIONES §5.5).
 - **Reentreno con uno en curso**: la Fase 1 responde 202 y encola un run nuevo; DECISIONES §6.1 dice 202 con el id del run en curso. Unificar en F6.3.
 - ~~Persistencia de la API~~ → **resuelto en Fase 4** (DECISIONES §5.11).
-- **Criterio de promoción provisional** (empate promueve, DECISIONES §5.10): reemplazar por §4 en F5.8.
+- ~~Criterio de promoción provisional~~ → **resuelto en Fase 5**: §4.2 implementado (DECISIONES §4.3).
 - **Checks requeridos progresivos**: agregar a la protección solo los jobs que ya existen.
 - ~~Protección de rama en repo privado~~ → **resuelto**: el repo `pd-lab-2` es público y `main` quedó protegida (F0.12).

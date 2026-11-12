@@ -97,6 +97,46 @@ def test_panel_filtra_fecha_menor_a_d_en_sql_y_observacion_gana(bd, tmp_path):
 
 
 @pytest.mark.integracion
+def test_panel_trae_promocion_de_la_ultima_solicitud_explicita(bd, tmp_path):
+    """§6.3: histórico con su promoción; observación con la de la última solicitud aceptada que
+    incluyó la familia de forma explícita; si no hay, NULL."""
+    escribir_csvs(tmp_path, dias=14)  # 2025-01-06 … 2025-01-19
+    cargar_datos(bd, tmp_path)
+
+    def solicitud(estado: str) -> int:
+        (sid,) = bd.execute(
+            "INSERT INTO solicitudes (tipo, estado, cuerpo_crudo) "
+            "VALUES ('prediccion', %s, '{}') RETURNING id",
+            (estado,),
+        ).fetchone()
+        return sid
+
+    def prediccion(sid: int, familia: str, promo: int, explicita: bool) -> None:
+        bd.execute(
+            "INSERT INTO predicciones (solicitud_id, tienda_id, fecha, familia_id, en_promocion, "
+            "promocion_explicita, venta_esperada, cantidad_sugerida, version_modelo) "
+            "VALUES (%s, 1, '2025-01-21', %s, %s, %s, 1, 1, '1')",
+            (sid, familia, promo, explicita),
+        )
+
+    a, b, c = solicitud("aceptada"), solicitud("aceptada"), solicitud("aceptada")
+    prediccion(a, "abarrotes", 2, True)
+    prediccion(b, "abarrotes", 5, True)  # la última explícita gana
+    prediccion(c, "abarrotes", 0, False)  # completada por E05: no cuenta
+    prediccion(c, "lacteos", 0, False)
+    bd.execute(
+        "INSERT INTO observaciones (tienda_id, fecha, familia_id, ventas) VALUES "
+        "(1, '2025-01-21', 'abarrotes', 10), (1, '2025-01-21', 'lacteos', 11)"
+    )
+    bd.commit()
+    panel = leer_panel(bd, date(2025, 1, 22), tienda_id=1).set_index(["fecha", "familia_id"])
+    assert panel.loc[(pd.Timestamp("2025-01-21"), "abarrotes"), "en_promocion"] == 5
+    assert pd.isna(panel.loc[(pd.Timestamp("2025-01-21"), "lacteos"), "en_promocion"])
+    historico = panel.loc[pd.Timestamp("2025-01-10")]
+    assert historico["en_promocion"].notna().all()
+
+
+@pytest.mark.integracion
 def test_reentrenamiento_termina_una_sola_vez(bd):
     repos.crear_reentrenamiento(bd, "abc")
     assert repos.obtener_reentrenamiento(bd, "abc").estado == "en_curso"
