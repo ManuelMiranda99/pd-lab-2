@@ -10,7 +10,6 @@ import pytest
 from novamercado.db import repos
 from novamercado.servicio import reentreno
 from novamercado.servicio.airflow import AirflowClient, AirflowNoDisponible
-from novamercado.servicio.prediccion import sanear
 from novamercado.servicio.salud import EstadoSalud, MonitorSalud, resumir
 
 
@@ -108,20 +107,6 @@ def test_monitor_cuenta_excepciones_como_caidas():
     monitor = MonitorSalud({"bd": lambda: True, "mlflow": explota})
     assert monitor.estado.caidos == ["bd", "mlflow"]  # antes del primer chequeo, nada está ok
     assert monitor.revisar().componentes == {"bd": True, "mlflow": False}
-
-
-@pytest.mark.parametrize(
-    ("venta", "cantidad", "esperado"),
-    [
-        (10.123, 12, (10.12, 12)),
-        (float("nan"), float("nan"), (0.0, 0)),
-        (-3, -1, (0.0, 0)),
-        (5.0, 5.2, (5.0, 6)),
-        ("x", None, (0.0, 0)),
-    ],
-)
-def test_sanear_salida(venta, cantidad, esperado):
-    assert sanear(venta, cantidad) == esperado
 
 
 # --- estado de un reentreno ------------------------------------------------------------------

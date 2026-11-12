@@ -50,7 +50,7 @@ def test_migrar_es_idempotente(bd):
     assert migrar(bd) == []
     versiones = [v for (v,) in bd.execute("SELECT version FROM migraciones")]
     bd.commit()
-    assert versiones == [1]
+    assert versiones == [1, 2]
 
 
 @pytest.mark.integracion

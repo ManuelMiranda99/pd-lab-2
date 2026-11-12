@@ -150,3 +150,10 @@ Trabajo delegado en paralelo a tres agentes, cada uno en su worktree y rama (`fe
   (leer `await request.body()` sin mirar `Content-Type`), reemplazar `api/esquemas_provisionales.py`
   por `novamercado.contrato` y persistir solicitudes, predicciones y correcciones.
 - Tener en cuenta: `code_paths` hace que MLflow recargue `novamercado` desde la copia del modelo.
+
+---
+
+## Sesión 2026-11-11 — Fase 4 (inicio)
+**Fase:** 4 — API completa y persistencia
+**Estado al cerrar:** _(sesión abierta)_
+**Plan del día:** Fase 4 completa (F4.1–F4.8), en una pasada (F1.12 verificada al abrir: `compose` en verde y requerido)

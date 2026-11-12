@@ -368,6 +368,27 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
 - **Justificación:** sirve para demostrar el ciclo completo con el baseline. **Se reemplaza** por el
   criterio de §4 (mejora ≥ 0.5 %, mayoría de ventanas, mejor que el baseline) en la Fase 5, porque un
   empate no debe tocar `champion`.
+### 5.11 Persistencia de solicitudes y orden de los errores
+- **Decisión:** toda solicitud queda en `solicitudes` (cuerpo crudo hasta 100 000 caracteres, forma
+  normalizada, `calidad_estado`, claves ignoradas y versión del modelo), **también las rechazadas**
+  con su `detail`. Cada hallazgo de la limpieza va a `correcciones`; cada predicción por familia, a
+  `predicciones` (sin UNIQUE por tienda/fecha y con `promocion_explicita` para §6.3). Una solicitud
+  aceptada se guarda en **una** transacción antes de responder. Las observaciones usan un upsert
+  `ON CONFLICT … WHERE ventas IS DISTINCT FROM …`: `registros_guardados` cuenta las filas
+  insertadas o cambiadas (un reenvío idéntico da 0) y cada cambio queda en
+  `observaciones_historial` con el valor anterior. El catálogo de la limpieza (tiendas, familias,
+  inicio del histórico y fin de `feriados`) se lee de la BD una vez y queda en memoria.
+- **Orden de los errores:** cuerpo ilegible (vacío, JSON inválido, raíz que no es objeto) → 422
+  aunque la BD esté caída; catálogo no disponible → 503; solicitud irreparable → 422; sin modelo
+  → 503; fallo de la BD o del modelo al predecir → 503. Nunca 400 ni 500: los errores de
+  validación de FastAPI también salen como 422 con `detail` de texto.
+- **Alternativas:** guardar solo las solicitudes aceptadas; registrar los rechazos solo en el log;
+  leer el catálogo de los CSV montados en `/datos`; responder antes de guardar.
+- **Justificación:** el enunciado pide registrar solicitudes, predicciones, correcciones y
+  observaciones. Un rechazo guardado permite auditar qué llegó sin ensuciar las tablas que usa el
+  entrenamiento. Leer el catálogo de la BD garantiza que la limpieza, el modelo y el DAG usen los
+  mismos datos que cargó el bootstrap. Guardar antes de responder evita que una respuesta exista
+  sin su registro.
 
 ## 6. Reglas operativas
 

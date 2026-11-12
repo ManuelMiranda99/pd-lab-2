@@ -79,6 +79,77 @@ MIGRACIONES: list[tuple[int, str, str]] = [
         );
         """,
     ),
+    (
+        2,
+        "solicitudes, predicciones, correcciones e historial de observaciones",
+        """
+        -- Toda solicitud recibida, aceptada o rechazada (422). El id secuencial ordena las
+        -- solicitudes de un mismo día sin usar el reloj (DECISIONES §6.3).
+        CREATE TABLE solicitudes (
+            id               BIGSERIAL PRIMARY KEY,
+            tipo             TEXT NOT NULL CHECK (tipo IN ('prediccion', 'observaciones')),
+            estado           TEXT NOT NULL CHECK (estado IN ('aceptada', 'rechazada')),
+            cuerpo_crudo     TEXT NOT NULL,
+            normalizado      JSONB,
+            tienda_id        INTEGER,
+            fecha            DATE,
+            calidad_estado   TEXT CHECK (calidad_estado IN ('ok', 'corregido', 'advertencia')),
+            codigo_rechazo   TEXT,
+            detail           TEXT,
+            claves_ignoradas JSONB NOT NULL DEFAULT '[]',
+            version_modelo   TEXT,
+            recibida_en      TIMESTAMPTZ NOT NULL DEFAULT now(),
+            CHECK ((estado = 'rechazada') = (detail IS NOT NULL))
+        );
+        CREATE INDEX solicitudes_tienda_fecha ON solicitudes (tienda_id, fecha);
+
+        -- Una fila por familia predicha. Sin UNIQUE por tienda/fecha: el contrato admite varias
+        -- solicitudes de la misma fecha y todas quedan registradas.
+        CREATE TABLE predicciones (
+            id                  BIGSERIAL PRIMARY KEY,
+            solicitud_id        BIGINT NOT NULL REFERENCES solicitudes (id),
+            tienda_id           INTEGER NOT NULL REFERENCES tiendas (tienda_id),
+            fecha               DATE NOT NULL,
+            familia_id          TEXT NOT NULL REFERENCES familias (familia_id),
+            en_promocion        INTEGER NOT NULL CHECK (en_promocion >= 0),
+            promocion_explicita BOOLEAN NOT NULL,
+            venta_esperada      DOUBLE PRECISION NOT NULL CHECK (venta_esperada >= 0),
+            cantidad_sugerida   INTEGER NOT NULL CHECK (cantidad_sugerida >= 0),
+            version_modelo      TEXT NOT NULL
+        );
+        CREATE INDEX predicciones_tienda_fecha ON predicciones (tienda_id, fecha);
+        CREATE INDEX predicciones_solicitud ON predicciones (solicitud_id);
+
+        -- Cada hallazgo de la limpieza (reparar, advertir o ignorar), de predicción y de
+        -- observaciones.
+        CREATE TABLE correcciones (
+            id           BIGSERIAL PRIMARY KEY,
+            solicitud_id BIGINT NOT NULL REFERENCES solicitudes (id),
+            codigo       TEXT NOT NULL,
+            campo        TEXT NOT NULL,
+            accion       TEXT NOT NULL CHECK (accion IN ('reparar', 'advertir', 'ignorar')),
+            detalle      TEXT NOT NULL
+        );
+        CREATE INDEX correcciones_solicitud ON correcciones (solicitud_id);
+
+        -- Altas y cambios de observaciones (un reenvío idéntico no deja fila).
+        CREATE TABLE observaciones_historial (
+            id              BIGSERIAL PRIMARY KEY,
+            solicitud_id    BIGINT NOT NULL REFERENCES solicitudes (id),
+            tienda_id       INTEGER NOT NULL,
+            fecha           DATE NOT NULL,
+            familia_id      TEXT NOT NULL,
+            ventas_anterior INTEGER,
+            ventas_nueva    INTEGER NOT NULL
+        );
+        CREATE INDEX observaciones_historial_tienda_fecha
+            ON observaciones_historial (tienda_id, fecha);
+
+        ALTER TABLE observaciones ADD COLUMN solicitud_id BIGINT REFERENCES solicitudes (id);
+        ALTER TABLE observaciones
+            ADD CONSTRAINT observaciones_ventas_no_negativas CHECK (ventas >= 0);
+        """,
+    ),
 ]
 
 

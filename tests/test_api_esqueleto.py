@@ -64,15 +64,29 @@ def _modelo() -> ModeloCargado:
     )
 
 
+def catalogo_sintetico():
+    """Catálogo equivalente al de `escribir_csvs` (para pruebas sin BD)."""
+    from novamercado.limpieza import Catalogo, Tienda
+
+    return Catalogo(
+        tiendas={t: Tienda(t, f"Tienda {t}", date(2019, 1, 1)) for t in (1, 2)},
+        familias={f: f.capitalize() for f in FAMILIAS},
+        fecha_inicio=date(2025, 1, 6),
+        fecha_fin_cobertura=date(2025, 12, 31),
+    )
+
+
 def _cliente(
-    *, modelo=None, salud=None, conectar=_sin_bd, airflow=None
+    *, modelo=None, salud=None, conectar=_sin_bd, airflow=None, catalogo=None
 ) -> tuple[TestClient, MonitorSalud]:
     monitor = MonitorSalud({})
     if salud is not None:
         from novamercado.servicio.salud import EstadoSalud
 
         monitor._estado = EstadoSalud(salud)
-    svc = Servicio(Config(), GestorFalso(modelo), monitor, airflow or _airflow(), conectar)
+    svc = Servicio(
+        Config(), GestorFalso(modelo), monitor, airflow or _airflow(), conectar, catalogo
+    )
     return TestClient(crear_app(svc, arrancar_hilos=False)), monitor
 
 
@@ -109,11 +123,11 @@ def test_modelo_en_memoria_con_campos_de_texto():
 
 
 def test_prediccion_sin_modelo_es_503_y_cuerpo_invalido_es_422():
-    cliente, _ = _cliente()
+    cliente, _ = _cliente(catalogo=catalogo_sintetico)
     cuerpo = {
         "tienda_id": 1,
         "fecha": "2025-01-20",
-        "familias": [{"familia_id": "x", "en_promocion": 0}],
+        "familias": [{"familia_id": "abarrotes", "en_promocion": 0}],
     }
     with cliente:
         assert cliente.post("/v1/prediccion", json=cuerpo).status_code == 503
@@ -122,11 +136,11 @@ def test_prediccion_sin_modelo_es_503_y_cuerpo_invalido_es_422():
 
 
 def test_prediccion_con_bd_caida_es_503_no_500():
-    cliente, _ = _cliente(modelo=_modelo())
+    cliente, _ = _cliente(modelo=_modelo(), catalogo=catalogo_sintetico)
     cuerpo = {
         "tienda_id": 1,
         "fecha": "2025-01-20",
-        "familias": [{"familia_id": "x", "en_promocion": 0}],
+        "familias": [{"familia_id": "abarrotes", "en_promocion": 0}],
     }
     with cliente:
         assert cliente.post("/v1/prediccion", json=cuerpo).status_code == 503
