@@ -5,66 +5,53 @@ No llama a MLflow: usa el `ModeloCargado` que recibe.
 
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass
-from datetime import date
+import logging
 
 import pandas as pd
 import psycopg
 
+from novamercado.contrato import PrediccionFamilia, SolicitudPrediccion, sanear_prediccion
 from novamercado.features.panel import leer_panel
 from novamercado.modelo.pyfunc import armar_entrada
 from novamercado.servicio.cargador import ModeloCargado
 
-
-@dataclass(frozen=True)
-class PrediccionFamilia:
-    familia_id: str
-    venta_esperada: float
-    cantidad_sugerida: int
+log = logging.getLogger(__name__)
 
 
-def sanear(venta: object, cantidad: object) -> tuple[float, int]:
-    """Garantiza venta finita ≥ 0 y cantidad entera ≥ 0 (nunca NaN ni negativos)."""
-    try:
-        v = float(venta)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        v = 0.0
-    if not math.isfinite(v) or v < 0:
-        v = 0.0
-    try:
-        c = float(cantidad)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        c = v
-    if not math.isfinite(c) or c < 0:
-        c = v
-    return round(v, 2), max(0, math.ceil(c - 1e-9))
+class ErrorModelo(RuntimeError):
+    """El modelo en memoria no pudo predecir (la API responde 503, nunca 500)."""
 
 
 def predecir(
-    conn: psycopg.Connection,
-    modelo: ModeloCargado,
-    tienda_id: int,
-    fecha: date,
-    familias: list[tuple[str, int]],
+    conn: psycopg.Connection, modelo: ModeloCargado, solicitud: SolicitudPrediccion
 ) -> list[PrediccionFamilia]:
-    panel = leer_panel(conn, fecha, tienda_id=tienda_id)
-    solicitud = pd.DataFrame(
-        [(tienda_id, pd.Timestamp(fecha), f, p) for f, p in familias],
+    """Predicciones en el orden de `solicitud.familias`, ya llevadas al contrato.
+
+    El panel se lee con `fecha < solicitud.fecha` en SQL (regla de no fuga).
+    """
+    panel = leer_panel(conn, solicitud.fecha, tienda_id=solicitud.tienda_id)
+    entrada = pd.DataFrame(
+        [
+            (solicitud.tienda_id, pd.Timestamp(solicitud.fecha), f.familia_id, f.en_promocion)
+            for f in solicitud.familias
+        ],
         columns=["tienda_id", "fecha", "familia_id", "en_promocion"],
     )
-    salida = modelo.modelo.predict(armar_entrada(solicitud, panel))
-    por_familia = {
-        str(f): (v, c)
-        for f, v, c in zip(
-            salida["familia_id"],
-            salida["venta_esperada"],
-            salida["cantidad_sugerida"],
-            strict=True,
-        )
-    }
-    resultado = []
-    for familia, _ in familias:
-        v, c = sanear(*por_familia.get(familia, (0.0, 0)))
-        resultado.append(PrediccionFamilia(familia, v, c))
-    return resultado
+    try:
+        salida = modelo.modelo.predict(armar_entrada(entrada, panel))
+        por_familia = {
+            str(f): (v, c)
+            for f, v, c in zip(
+                salida["familia_id"],
+                salida["venta_esperada"],
+                salida["cantidad_sugerida"],
+                strict=True,
+            )
+        }
+    except Exception as exc:  # noqa: BLE001 — cualquier fallo del modelo es un 503
+        log.exception("El modelo %s v%s falló al predecir", modelo.nombre, modelo.version)
+        raise ErrorModelo(f"El modelo vigente no pudo predecir: {type(exc).__name__}") from exc
+    return [
+        sanear_prediccion(f.familia_id, *por_familia.get(f.familia_id, (0.0, 0.0)))
+        for f in solicitud.familias
+    ]

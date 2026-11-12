@@ -1,4 +1,8 @@
-"""`GET /health` y `GET /modelo` (desde el modelo en memoria, nunca desde el Registry)."""
+"""`GET /health` y `GET /modelo` (desde el modelo en memoria, nunca desde el Registry).
+
+`/health` solo lee el último resultado del monitor de fondo (BD, MLflow, Airflow con el DAG
+activo); nunca espera a una dependencia.
+"""
 
 from __future__ import annotations
 
@@ -6,24 +10,25 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from api.dependencias import ServicioDep
-from api.esquemas_provisionales import ModeloInfo
+from novamercado.contrato import ErrorRespuesta, Health, ModeloInfo
 from novamercado.servicio.salud import resumir
 
 router = APIRouter(tags=["salud"])
 
 
-@router.get("/health")
+@router.get("/health", response_model=Health, responses={503: {"model": Health}})
 def health(servicio: ServicioDep) -> JSONResponse:
-    codigo, cuerpo = resumir(servicio.monitor.estado, servicio.gestor.actual is not None)
-    modelo = servicio.gestor.actual
+    modelo = servicio.gestor.actual  # una sola lectura: coherente con el cuerpo
+    codigo, cuerpo = resumir(servicio.monitor.estado, modelo is not None)
     if modelo is not None:
         cuerpo["version_modelo"] = modelo.version
-    return JSONResponse(status_code=codigo, content=cuerpo)
+    return JSONResponse(status_code=codigo, content=Health(**cuerpo).model_dump(mode="json"))
 
 
-@router.get("/modelo", response_model=ModeloInfo)
-def modelo(servicio: ServicioDep) -> ModeloInfo | JSONResponse:
+@router.get("/modelo", response_model=ModeloInfo, responses={503: {"model": ErrorRespuesta}})
+def modelo(servicio: ServicioDep) -> JSONResponse:
     actual = servicio.gestor.actual
     if actual is None:
         return JSONResponse(status_code=503, content={"detail": "Sin modelo cargado todavía"})
-    return ModeloInfo(nombre=actual.nombre, alias=actual.alias, version=actual.version)
+    info = ModeloInfo(nombre=actual.nombre, alias=actual.alias, version=actual.version)
+    return JSONResponse(status_code=200, content=info.model_dump(mode="json"))

@@ -52,7 +52,10 @@ def escribir_csvs(carpeta: Path, *, bom: bool = False, dias: int = 21) -> None:
         columns=["familia_id", "costo_faltante", "costo_sobrante"],
     ).to_csv(carpeta / "costos.csv", index=False, encoding=enc)
     pd.DataFrame(
-        [("2025-01-01", "Año Nuevo", "feriado", "nacional")],
+        [
+            ("2025-01-01", "Año Nuevo", "feriado", "nacional"),
+            ("2025-12-31", "Fin de año", "medio_dia", "nacional"),
+        ],
         columns=["fecha", "nombre", "tipo", "ambito"],
     ).to_csv(carpeta / "feriados.csv", index=False, encoding=enc)
     panel = panel_sintetico(dias=dias)

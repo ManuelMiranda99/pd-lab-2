@@ -1,63 +1,80 @@
-"""`POST /v1/prediccion` mínimo (esqueleto). La limpieza completa llega en las Fases 3–4."""
+"""`POST /v1/prediccion` y `POST /v1/observaciones`: routers delgados.
+
+El cuerpo se lee crudo (cualquier `Content-Type`) y toda la limpieza, la predicción y la
+persistencia viven en `novamercado.servicio.solicitudes`.
+"""
 
 from __future__ import annotations
 
-import psycopg
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
-from api.dependencias import ServicioDep, abrir_conexion
-from api.esquemas_provisionales import (
-    Calidad,
-    PrediccionFamilia,
-    RespuestaPrediccion,
+from api.dependencias import CuerpoCrudo, ServicioDep
+from novamercado.contrato import (
+    ErrorRespuesta,
+    ObservacionesResponse,
+    PrediccionResponse,
+    SolicitudObservaciones,
     SolicitudPrediccion,
 )
-from novamercado.db import repos
-from novamercado.servicio.prediccion import predecir
+from novamercado.servicio.solicitudes import (
+    ErrorAtencion,
+    atender_observaciones,
+    atender_prediccion,
+)
 
-router = APIRouter(tags=["prediccion"])
+router = APIRouter(prefix="/v1", tags=["prediccion"])
+
+_ERRORES = {
+    422: {"model": ErrorRespuesta, "description": "Solicitud irreparable (`detail` legible)"},
+    503: {"model": ErrorRespuesta, "description": "Sin modelo o base de datos no disponible"},
+}
 
 
-@router.post("/v1/prediccion", response_model=RespuestaPrediccion)
-def prediccion(solicitud: SolicitudPrediccion, servicio: ServicioDep) -> RespuestaPrediccion:
-    modelo = servicio.gestor.actual  # una sola referencia para toda la solicitud
-    if modelo is None:
-        raise HTTPException(status_code=503, detail="Sin modelo cargado todavía")
-    with abrir_conexion(servicio) as conn:
-        try:
-            if not repos.tienda_existe(conn, solicitud.tienda_id):
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"tienda_id {solicitud.tienda_id} no existe en el catálogo",
-                )
-            catalogo = set(repos.familias_catalogo(conn))
-            desconocidas = [
-                f.familia_id for f in solicitud.familias if f.familia_id not in catalogo
-            ]
-            if desconocidas:
-                raise HTTPException(
-                    status_code=422, detail=f"familia_id desconocida: {', '.join(desconocidas)}"
-                )
-            resultado = predecir(
-                conn,
-                modelo,
-                solicitud.tienda_id,
-                solicitud.fecha,
-                [(f.familia_id, f.en_promocion) for f in solicitud.familias],
-            )
-        except psycopg.Error as exc:
-            raise HTTPException(status_code=503, detail="Base de datos no disponible") from exc
-    return RespuestaPrediccion(
-        tienda_id=solicitud.tienda_id,
-        fecha=solicitud.fecha.isoformat(),
-        version_modelo=modelo.version,
-        predicciones=[
-            PrediccionFamilia(
-                familia_id=p.familia_id,
-                venta_esperada=p.venta_esperada,
-                cantidad_sugerida=p.cantidad_sugerida,
-            )
-            for p in resultado
-        ],
-        calidad=Calidad(estado="ok", observaciones=[]),
-    )
+def _cuerpo_documentado(modelo: type) -> dict:
+    """Esquema del cuerpo para OpenAPI (la lectura real es tolerante y no usa este modelo)."""
+    return {
+        "requestBody": {
+            "required": True,
+            "content": {"application/json": {"schema": modelo.model_json_schema()}},
+        }
+    }
+
+
+def _error(exc: ErrorAtencion) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
+@router.post(
+    "/prediccion",
+    response_model=PrediccionResponse,
+    responses=_ERRORES,
+    openapi_extra=_cuerpo_documentado(SolicitudPrediccion),
+)
+def prediccion(cuerpo: CuerpoCrudo, servicio: ServicioDep) -> JSONResponse:
+    try:
+        respuesta = atender_prediccion(
+            cuerpo,
+            catalogo=servicio.catalogo,
+            conectar=servicio.conectar,
+            modelo=servicio.gestor.actual,  # una sola referencia para toda la solicitud
+        )
+    except ErrorAtencion as exc:
+        return _error(exc)
+    return JSONResponse(status_code=200, content=respuesta.model_dump(mode="json"))
+
+
+@router.post(
+    "/observaciones",
+    response_model=ObservacionesResponse,
+    responses=_ERRORES,
+    openapi_extra=_cuerpo_documentado(SolicitudObservaciones),
+)
+def observaciones(cuerpo: CuerpoCrudo, servicio: ServicioDep) -> JSONResponse:
+    try:
+        respuesta = atender_observaciones(
+            cuerpo, catalogo=servicio.catalogo, conectar=servicio.conectar
+        )
+    except ErrorAtencion as exc:
+        return _error(exc)
+    return JSONResponse(status_code=200, content=respuesta.model_dump(mode="json"))

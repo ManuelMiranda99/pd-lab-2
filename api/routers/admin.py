@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
 from api.dependencias import ServicioDep, abrir_conexion
+from novamercado.contrato import ReentrenoIniciado, ReentrenoStatus
 from novamercado.db import repos
 from novamercado.servicio.airflow import AirflowNoDisponible
 from novamercado.servicio.reentreno import resolver_estado
@@ -51,7 +52,7 @@ def reentrenar(servicio: ServicioDep) -> JSONResponse:
                 motivo=f"No se pudo iniciar en Airflow: {exc}",
             )
             raise HTTPException(status_code=503, detail="Airflow no disponible") from exc
-    return JSONResponse(status_code=202, content={"id": id_})
+    return JSONResponse(status_code=202, content=ReentrenoIniciado(id=id_).model_dump(mode="json"))
 
 
 @router.get("/reentrenar/{id_}")
@@ -71,4 +72,4 @@ def estado_reentreno(id_: str, servicio: ServicioDep) -> JSONResponse:
             )
         except psycopg.Error as exc:
             raise HTTPException(status_code=503, detail=_BD_CAIDA) from exc
-    return JSONResponse(status_code=200, content=cuerpo)
+    return JSONResponse(status_code=200, content=ReentrenoStatus(**cuerpo).model_dump(mode="json"))

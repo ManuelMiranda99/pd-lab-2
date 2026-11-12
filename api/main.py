@@ -12,7 +12,11 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from functools import partial
 
-from fastapi import FastAPI
+import psycopg
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.dependencias import Servicio
 from api.routers import admin, prediccion, salud
@@ -26,6 +30,37 @@ from novamercado.servicio.registro import RegistroMlflow, mlflow_saludable
 from novamercado.servicio.salud import MonitorSalud
 
 log = logging.getLogger("novamercado.api")
+
+
+def _texto_validacion(exc: RequestValidationError) -> str:
+    """Errores de validación de FastAPI (ruta o query) como un texto legible."""
+    partes = []
+    for err in exc.errors():
+        ubicacion = ".".join(str(p) for p in err.get("loc", ()) if p not in ("body", "path"))
+        partes.append(
+            f"{ubicacion}: {err.get('msg', 'valor inválido')}" if ubicacion else err.get("msg", "")
+        )
+    return "; ".join(p for p in partes if p) or "Solicitud inválida"
+
+
+def registrar_manejadores(app: FastAPI) -> None:
+    """Todo error sale como `{"detail": "<texto>"}`: 422 para validación (nunca 400) y 503 si
+    la BD falla en cualquier endpoint (nunca 500)."""
+
+    @app.exception_handler(RequestValidationError)
+    async def _validacion(_: Request, exc: RequestValidationError) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": _texto_validacion(exc)})
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http(_: Request, exc: StarletteHTTPException) -> JSONResponse:
+        codigo = 422 if exc.status_code == 400 else exc.status_code
+        detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+        return JSONResponse(status_code=codigo, content={"detail": detail}, headers=exc.headers)
+
+    @app.exception_handler(psycopg.Error)
+    async def _bd(_: Request, exc: psycopg.Error) -> JSONResponse:
+        log.warning("Error de base de datos: %s", exc)
+        return JSONResponse(status_code=503, content={"detail": "Base de datos no disponible"})
 
 
 def _bd_ok(cfg: Config) -> bool:
@@ -99,6 +134,7 @@ def crear_app(servicio: Servicio | None = None, *, arrancar_hilos: bool = True) 
         description="Venta esperada y cantidad sugerida por tienda y familia.",
         lifespan=ciclo_de_vida,
     )
+    registrar_manejadores(app)
     app.include_router(salud.router)
     app.include_router(prediccion.router)
     app.include_router(admin.router)

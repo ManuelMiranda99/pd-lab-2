@@ -119,7 +119,7 @@ supera al aditivo y a la regresión cuantílica directa.
 
 ---
 
-## Fase 1 — Esqueleto operativo de punta a punta (walking skeleton)
+## Fase 1 — Esqueleto operativo de punta a punta (walking skeleton)  ✅ cerrada (2026-11-11)
 **Objetivo:** con un modelo **trivial** (baseline), que todo el circuito operativo funcione en Docker.
 Aquí se resuelven los riesgos más caros: Airflow, artefactos de MLflow, dependencias, RAM, arranque.
 
@@ -157,7 +157,7 @@ Aquí se resuelven los riesgos más caros: Airflow, artefactos de MLflow, depend
       Encapsular en `AirflowClient`.
 - [x] F1.11 Medir: arranque en frío hasta `/health` ok, RAM pico (`docker stats`), `stop mlflow`
       → degradado, `down`/`up` sin `-v` conserva y no reentrena. Anotar números en la bitácora.
-- [~] F1.12 Job de CI `compose`: `docker compose config`, servicio `mlflow` presente, puerto 8000,
+- [x] F1.12 Job de CI `compose`: `docker compose config`, servicio `mlflow` presente, puerto 8000,
       sin `latest`, hadolint, `docker compose build`. Agregarlo a los checks requeridos.
 
 **Criterio de terminado:** desde un clon limpio + `data/` + `cp .env.example .env` → `docker compose up`
@@ -226,28 +226,28 @@ observaciones de calidad" o en un rechazo con motivo.
 
 ---
 
-## Fase 4 — API completa y persistencia
+## Fase 4 — API completa y persistencia  ✅ cerrada (2026-11-11)
 **Objetivo:** reemplazar la API mínima por la completa sobre el esqueleto.
 
-- [ ] F4.1 Esquema: `solicitudes` (crudo, normalizado, estado, **también rechazadas** con `detail`),
+- [x] F4.1 Esquema: `solicitudes` (crudo, normalizado, estado, **también rechazadas** con `detail`),
       `predicciones` (por familia, `version_modelo`, `en_promocion`; **sin UNIQUE** por tienda/fecha),
       `correcciones` (de predicción **y** de observaciones), `observaciones` (PK tienda/fecha/familia,
       `actualizado_en`, flags de exclusión), `reentrenamientos`, histórico, marcador de bootstrap.
       Fechas como `DATE`. Índice `(tienda_id, fecha)`.
-- [ ] F4.2 `POST /v1/prediccion`: limpiar → panel `histórico ∪ observaciones` filtrado `fecha < D` en
+- [x] F4.2 `POST /v1/prediccion`: limpiar → panel `histórico ∪ observaciones` filtrado `fecha < D` en
       SQL → predecir con `m = estado.modelo` → saneamiento de salida (sin NaN, `ceil` a int ≥ 0,
       versión como texto) → guardar todo en una transacción **antes** de responder. Latencia < 1 s.
-- [ ] F4.3 `POST /v1/observaciones`: dedupe en limpieza → upsert
+- [x] F4.3 `POST /v1/observaciones`: dedupe en limpieza → upsert
       `ON CONFLICT … DO UPDATE … WHERE observaciones.ventas IS DISTINCT FROM EXCLUDED.ventas RETURNING`;
       `registros_guardados` = filas devueltas (reenvío idéntico → 0); historial de cambios.
-- [ ] F4.4 422 con `detail` legible para todo: validación, JSON inválido, cuerpo vacío, array en raíz,
+- [x] F4.4 422 con `detail` legible para todo: validación, JSON inválido, cuerpo vacío, array en raíz,
       Content-Type incorrecto. Ningún input termina en 500/400.
-- [ ] F4.5 `GET /modelo` desde el modelo **en memoria** (no del Registry).
-- [ ] F4.6 `GET /health`: tarea de fondo cada ~15 s con timeouts de 2–3 s y resultado cacheado; BD
+- [x] F4.5 `GET /modelo` desde el modelo **en memoria** (no del Registry).
+- [x] F4.6 `GET /health`: tarea de fondo cada ~15 s con timeouts de 2–3 s y resultado cacheado; BD
       (`SELECT 1`), MLflow (`GET /health` con httpx), Airflow (health + DAG existe y no pausado), modelo;
       `ok` / `degradado` + `motivo`; 503 sin modelo.
-- [ ] F4.7 Endpoints con BD síncrona como `def` (no `async def`); nada bloqueante en el event loop.
-- [ ] F4.8 Tests de API con `TestClient` y `TEST_DATABASE_URL` (sin MLflow): idempotencia, solicitudes
+- [x] F4.7 Endpoints con BD síncrona como `def` (no `async def`); nada bloqueante en el event loop.
+- [x] F4.8 Tests de API con `TestClient` y `TEST_DATABASE_URL` (sin MLflow): idempotencia, solicitudes
       repetidas, rechazos registrados, test de **no fuga** (alterar la venta de `D` no cambia la
       predicción de `D`).
 
