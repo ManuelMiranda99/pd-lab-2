@@ -5,8 +5,8 @@
       "name": "novamercado",
       "artifact_location": "mlflow-artifacts:/1",
       "lifecycle_stage": "active",
-      "last_update_time": 1794493292221,
-      "creation_time": 1794493292221,
+      "last_update_time": 1794520287083,
+      "creation_time": 1794520287083,
       "workspace": "default"
     },
     {
@@ -14,8 +14,8 @@
       "name": "Default",
       "artifact_location": "mlflow-artifacts:/0",
       "lifecycle_stage": "active",
-      "last_update_time": 1794493241772,
-      "creation_time": 1794493241772,
+      "last_update_time": 1794519959830,
+      "creation_time": 1794519959830,
       "workspace": "default"
     }
   ],
@@ -24,14 +24,14 @@
     "aliases": [
       {
         "alias": "champion",
-        "version": "3"
+        "version": "2"
       }
     ]
   },
   "versiones": [
     {
       "version": "1",
-      "run_id": "eae122132fbf472280783e57ce92bfc1",
+      "run_id": "199d281857a44b90bf309f7a9862f8fa",
       "estado": "READY",
       "aliases": [],
       "tags": {
@@ -40,16 +40,7 @@
     },
     {
       "version": "2",
-      "run_id": "2bc0f7f899834cf2a4ce707a121c3975",
-      "estado": "READY",
-      "aliases": [],
-      "tags": {
-        "promovido": "False"
-      }
-    },
-    {
-      "version": "3",
-      "run_id": "501c4c30da674727a9e8b064d8c7d66d",
+      "run_id": "3f151e2d0b6c4d7aa2aaf1de08c96c7b",
       "estado": "READY",
       "aliases": [
         "champion"
@@ -61,7 +52,7 @@
   ],
   "runs": [
     {
-      "run_id": "31c321f41c8248e395e1653703c0e416",
+      "run_id": "d0a4cb7613f3468e8da2e5b3cef602e4",
       "nombre": "baseline-bootstrap",
       "estado": "FINISHED",
       "rol": "referencia",
@@ -86,7 +77,7 @@
       }
     },
     {
-      "run_id": "eae122132fbf472280783e57ce92bfc1",
+      "run_id": "199d281857a44b90bf309f7a9862f8fa",
       "nombre": "hgb_poisson-bootstrap",
       "estado": "FINISHED",
       "rol": "retador",
@@ -113,48 +104,8 @@
       }
     },
     {
-      "run_id": "e462d7ee3383471bbdee35eb962c4c2d",
-      "nombre": "baseline-7387a3fc05404976b06fd05aee37bb2c",
-      "estado": "FINISHED",
-      "rol": "referencia",
-      "decision": null,
-      "metricas": {},
-      "linaje": {
-        "id_reentreno": "7387a3fc05404976b06fd05aee37bb2c",
-        "modelo": "baseline_dia_semana",
-        "fecha_min": "2024-03-01",
-        "fecha_max": "2026-02-28",
-        "filas": "83052",
-        "observaciones": "0",
-        "commit": "desconocido",
-        "version_vigente": "1",
-        "datos_sha256": "5cc214b3fd8e7cfb037685c66f5a39045fa7cac2ec3f7ba335f86d5d3be6897d"
-      }
-    },
-    {
-      "run_id": "2bc0f7f899834cf2a4ce707a121c3975",
-      "nombre": "hgb_poisson-7387a3fc05404976b06fd05aee37bb2c",
-      "estado": "FINISHED",
-      "rol": "retador",
-      "decision": "Solo 0 días evaluables después del corte del vigente (mínimo 7): se conserva el vigente",
-      "metricas": {
-        "promovido": 0.0
-      },
-      "linaje": {
-        "id_reentreno": "7387a3fc05404976b06fd05aee37bb2c",
-        "modelo": "hgb_poisson",
-        "fecha_min": "2024-03-01",
-        "fecha_max": "2026-02-28",
-        "filas": "83052",
-        "observaciones": "0",
-        "commit": "desconocido",
-        "version_vigente": "1",
-        "datos_sha256": "5cc214b3fd8e7cfb037685c66f5a39045fa7cac2ec3f7ba335f86d5d3be6897d"
-      }
-    },
-    {
-      "run_id": "85bcd21ec3734c89bde6ed6d6480611d",
-      "nombre": "baseline-518816a0ce144b1ea91fa2c278ee6a81",
+      "run_id": "a9ec1db88f8f4244b0f73713a1a7d83a",
+      "nombre": "baseline-2567920de8fa41f4b7fdf9041581d018",
       "estado": "FINISHED",
       "rol": "referencia",
       "decision": null,
@@ -166,7 +117,7 @@
         "sesgo": -54.19598214285714
       },
       "linaje": {
-        "id_reentreno": "518816a0ce144b1ea91fa2c278ee6a81",
+        "id_reentreno": "2567920de8fa41f4b7fdf9041581d018",
         "modelo": "baseline_dia_semana",
         "fecha_min": "2024-03-01",
         "fecha_max": "2026-03-14",
@@ -178,8 +129,8 @@
       }
     },
     {
-      "run_id": "501c4c30da674727a9e8b064d8c7d66d",
-      "nombre": "hgb_poisson-518816a0ce144b1ea91fa2c278ee6a81",
+      "run_id": "3f151e2d0b6c4d7aa2aaf1de08c96c7b",
+      "nombre": "hgb_poisson-2567920de8fa41f4b7fdf9041581d018",
       "estado": "FINISHED",
       "rol": "retador",
       "decision": "Costo en validación 46 296 vs 47 167 del vigente (−1.8 %, gana 1/2 ventanas): promovido",
@@ -195,7 +146,7 @@
         "promovido": 1.0
       },
       "linaje": {
-        "id_reentreno": "518816a0ce144b1ea91fa2c278ee6a81",
+        "id_reentreno": "2567920de8fa41f4b7fdf9041581d018",
         "modelo": "hgb_poisson",
         "fecha_min": "2024-03-01",
         "fecha_max": "2026-03-14",

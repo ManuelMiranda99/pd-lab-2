@@ -1,8 +1,8 @@
 # Simulación de la operación (sin fuga)
 
-Configuración: `{"proyecto": "novamercado-sim2", "levantar": true, "corte": "2025-10-31", "inicio": "2025-11-28", "fin": "2026-02-28", "choque": 1.2, "choque_desde": "2026-02-01", "reentrenar_cada": 14, "caida_mlflow": "2026-01-10", "reinicio": "2026-01-24", "prob_error": 0.2, "prob_repetida": 0.1, "semilla": 2026}`
+Configuración: `{"proyecto": "novamercado-sim", "levantar": true, "corte": "2025-10-31", "inicio": "2025-11-28", "fin": "2026-02-28", "choque": 1.2, "choque_desde": "2026-02-01", "reentrenar_cada": 14, "caida_mlflow": "2026-01-10", "reinicio": "2026-01-24", "prob_error": 0.2, "prob_repetida": 0.1, "semilla": 2026}`
 
-- Días simulados: 93 · filas predichas: 11160 · duración: 621.2 s
+- Días simulados: 93 · filas predichas: 11160 · duración: 459.2 s
 - **Costo de las sugerencias: modelo 352,937 vs baseline 523,125 (-32.5%)**
 - Problemas de contrato: 0 · fallas: 0
 
@@ -19,20 +19,20 @@ Configuración: `{"proyecto": "novamercado-sim2", "levantar": true, "corte": "20
 
 | Después de | s | Estado | Promovido | Versión | s hasta en uso |
 |---|---:|---|---|---|---:|
-| 2025-12-11 | 48.5 | exitoso | False | 1 |  |
-| 2025-12-25 | 60.5 | exitoso | False | 1 |  |
-| 2026-01-08 | 69.7 | exitoso | True | 4 | 4.0 |
-| 2026-01-22 | 60.6 | exitoso | False | 4 |  |
-| 2026-02-05 | 75.7 | exitoso | False | 4 |  |
-| 2026-02-19 | 72.6 | exitoso | True | 7 | 0.0 |
+| 2025-12-11 | 42.4 | exitoso | False | 1 |  |
+| 2025-12-25 | 51.4 | exitoso | False | 1 |  |
+| 2026-01-08 | 51.4 | exitoso | True | 2 | 8.0 |
+| 2026-01-22 | 42.4 | exitoso | False | 2 |  |
+| 2026-02-05 | 54.6 | exitoso | False | 2 |  |
+| 2026-02-19 | 48.5 | exitoso | True | 3 | 10.1 |
 
 ## Eventos
 
-- {"tipo": "arranque", "segundos": 97.2, "modelo": {"nombre": "novamercado", "alias": "champion", "version": "1"}}
+- {"tipo": "arranque", "segundos": 82.1, "modelo": {"nombre": "novamercado", "alias": "champion", "version": "1"}}
 - {"tipo": "corte_verificado", "fecha_max_modelo": "2025-10-31", "corte": "2025-10-31"}
-- {"tipo": "mlflow_detenido", "fecha": "2026-01-10", "segundos_hasta_degradado": 1.0192014159983955}
-- {"tipo": "mlflow_iniciado", "fecha": "2026-01-10", "segundos_hasta_ok": 6.051435958001093}
-- {"tipo": "down_up", "fecha": "2026-01-24", "segundos": 28.4, "modelo": {"nombre": "novamercado", "alias": "champion", "version": "4"}}
+- {"tipo": "mlflow_detenido", "fecha": "2026-01-10", "segundos_hasta_degradado": 7.068904665997252}
+- {"tipo": "mlflow_iniciado", "fecha": "2026-01-10", "segundos_hasta_ok": 8.085217667001416}
+- {"tipo": "down_up", "fecha": "2026-01-24", "segundos": 28.9, "modelo": {"nombre": "novamercado", "alias": "champion", "version": "2"}}
 
 ## Chequeos
 
@@ -79,9 +79,9 @@ Configuración: `{"proyecto": "novamercado-sim2", "levantar": true, "corte": "20
 
 ## Latencias
 
-- health: {"n": 41, "p50_ms": 3.3, "p95_ms": 11.2}
-- modelo: {"n": 19, "p50_ms": 2.3, "p95_ms": 5.7}
-- prediccion: {"n": 1565, "p50_ms": 133.8, "p95_ms": 146.3}
-- observaciones: {"n": 1093, "p50_ms": 10.9, "p95_ms": 13.4}
-- reentrenar: {"n": 7, "p50_ms": 35.1, "p95_ms": 63.2}
-- estado_reentreno: {"n": 134, "p50_ms": 19.7, "p95_ms": 29.6}
+- health: {"n": 44, "p50_ms": 4.7, "p95_ms": 10.2}
+- modelo: {"n": 27, "p50_ms": 3.2, "p95_ms": 9.9}
+- prediccion: {"n": 1565, "p50_ms": 49.9, "p95_ms": 76.9}
+- observaciones: {"n": 1093, "p50_ms": 9.9, "p95_ms": 11.9}
+- reentrenar: {"n": 7, "p50_ms": 42.6, "p95_ms": 72.9}
+- estado_reentreno: {"n": 102, "p50_ms": 20.7, "p95_ms": 30.0}

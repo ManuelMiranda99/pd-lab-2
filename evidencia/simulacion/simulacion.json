@@ -1,6 +1,6 @@
 {
   "configuracion": {
-    "proyecto": "novamercado-sim2",
+    "proyecto": "novamercado-sim",
     "levantar": true,
     "corte": "2025-10-31",
     "inicio": "2025-11-28",
@@ -14,7 +14,7 @@
     "prob_repetida": 0.1,
     "semilla": 2026
   },
-  "duracion_s": 621.2,
+  "duracion_s": 459.2,
   "dias_simulados": 93,
   "filas_predichas": 11160,
   "costo": {
@@ -104,13 +104,13 @@
   },
   "versiones_usadas": {
     "1": 5040,
-    "4": 5040,
-    "7": 1080
+    "2": 5040,
+    "3": 1080
   },
   "reentrenos": [
     {
       "despues_de": "2025-12-11",
-      "segundos": 48.5,
+      "segundos": 42.4,
       "estado": "exitoso",
       "promovido": false,
       "version": "1",
@@ -118,7 +118,7 @@
     },
     {
       "despues_de": "2025-12-25",
-      "segundos": 60.5,
+      "segundos": 51.4,
       "estado": "exitoso",
       "promovido": false,
       "version": "1",
@@ -126,43 +126,43 @@
     },
     {
       "despues_de": "2026-01-08",
-      "segundos": 69.7,
+      "segundos": 51.4,
       "estado": "exitoso",
       "promovido": true,
-      "version": "4",
+      "version": "2",
       "motivo": "Costo en validación 80 938 vs 85 749 del vigente (−5.6 %, gana 2/3 ventanas): promovido",
-      "segundos_hasta_en_uso": 4.0
+      "segundos_hasta_en_uso": 8.0
     },
     {
       "despues_de": "2026-01-22",
-      "segundos": 60.6,
+      "segundos": 42.4,
       "estado": "exitoso",
       "promovido": false,
-      "version": "4",
+      "version": "2",
       "motivo": "Costo en validación 40 336 vs 40 320 del vigente (+0.0 %, gana 1/2 ventanas): se conserva el vigente (mejora menor a 0.5 %)"
     },
     {
       "despues_de": "2026-02-05",
-      "segundos": 75.7,
+      "segundos": 54.6,
       "estado": "exitoso",
       "promovido": false,
-      "version": "4",
+      "version": "2",
       "motivo": "Costo en validación 73 269 vs 73 520 del vigente (−0.3 %, gana 2/3 ventanas): se conserva el vigente (mejora menor a 0.5 %)"
     },
     {
       "despues_de": "2026-02-19",
-      "segundos": 72.6,
+      "segundos": 48.5,
       "estado": "exitoso",
       "promovido": true,
-      "version": "7",
+      "version": "3",
       "motivo": "Costo en validación 88 602 vs 94 566 del vigente (−6.3 %, gana 2/3 ventanas): promovido",
-      "segundos_hasta_en_uso": 0.0
+      "segundos_hasta_en_uso": 10.1
     }
   ],
   "eventos": [
     {
       "tipo": "arranque",
-      "segundos": 97.2,
+      "segundos": 82.1,
       "modelo": {
         "nombre": "novamercado",
         "alias": "champion",
@@ -177,29 +177,29 @@
     {
       "tipo": "mlflow_detenido",
       "fecha": "2026-01-10",
-      "segundos_hasta_degradado": 1.0192014159983955
+      "segundos_hasta_degradado": 7.068904665997252
     },
     {
       "tipo": "mlflow_iniciado",
       "fecha": "2026-01-10",
-      "segundos_hasta_ok": 6.051435958001093
+      "segundos_hasta_ok": 8.085217667001416
     },
     {
       "tipo": "down_up",
       "fecha": "2026-01-24",
-      "segundos": 28.4,
+      "segundos": 28.9,
       "modelo": {
         "nombre": "novamercado",
         "alias": "champion",
-        "version": "4"
+        "version": "2"
       }
     }
   ],
   "codigos_http": {
-    "estado_reentreno 200": 134,
-    "health 200": 15,
-    "health 503": 26,
-    "modelo 200": 19,
+    "estado_reentreno 200": 102,
+    "health 200": 23,
+    "health 503": 21,
+    "modelo 200": 27,
     "observaciones 200": 1093,
     "prediccion 200": 1379,
     "prediccion 422": 186,
@@ -284,34 +284,34 @@
   "fallas": [],
   "latencias": {
     "health": {
-      "n": 41,
-      "p50_ms": 3.3,
-      "p95_ms": 11.2
+      "n": 44,
+      "p50_ms": 4.7,
+      "p95_ms": 10.2
     },
     "modelo": {
-      "n": 19,
-      "p50_ms": 2.3,
-      "p95_ms": 5.7
+      "n": 27,
+      "p50_ms": 3.2,
+      "p95_ms": 9.9
     },
     "prediccion": {
       "n": 1565,
-      "p50_ms": 133.8,
-      "p95_ms": 146.3
+      "p50_ms": 49.9,
+      "p95_ms": 76.9
     },
     "observaciones": {
       "n": 1093,
-      "p50_ms": 10.9,
-      "p95_ms": 13.4
+      "p50_ms": 9.9,
+      "p95_ms": 11.9
     },
     "reentrenar": {
       "n": 7,
-      "p50_ms": 35.1,
-      "p95_ms": 63.2
+      "p50_ms": 42.6,
+      "p95_ms": 72.9
     },
     "estado_reentreno": {
-      "n": 134,
-      "p50_ms": 19.7,
-      "p95_ms": 29.6
+      "n": 102,
+      "p50_ms": 20.7,
+      "p95_ms": 30.0
     }
   }
 }

@@ -14,30 +14,30 @@
   },
   "ejecuciones": [
     {
-      "dag_run_id": "7387a3fc05404976b06fd05aee37bb2c",
+      "dag_run_id": "f0d9efebe14a46e0a889d179e342846f",
       "estado": "success",
-      "inicio": "2026-11-12T14:21:39.446312Z",
-      "fin": "2026-11-12T14:22:03.685460Z",
+      "inicio": "2026-11-12T21:51:39.205824Z",
+      "fin": "2026-11-12T21:51:52.469655Z",
       "tareas": [
         {
           "tarea": "verificar",
           "estado": "success",
-          "duracion_s": 2.779233
+          "duracion_s": 4.216556
         },
         {
           "tarea": "entrenar",
           "estado": "success",
-          "duracion_s": 16.767063
+          "duracion_s": 3.44552
         },
         {
           "tarea": "promover",
           "estado": "success",
-          "duracion_s": 0.190764
+          "duracion_s": 0.350606
         },
         {
           "tarea": "confirmar",
           "estado": "success",
-          "duracion_s": 0.928034
+          "duracion_s": 1.322807
         },
         {
           "tarea": "fin",
@@ -47,35 +47,35 @@
         {
           "tarea": "cerrar",
           "estado": "success",
-          "duracion_s": 0.178566
+          "duracion_s": 0.250351
         }
       ]
     },
     {
-      "dag_run_id": "518816a0ce144b1ea91fa2c278ee6a81",
+      "dag_run_id": "2567920de8fa41f4b7fdf9041581d018",
       "estado": "success",
-      "inicio": "2026-11-12T14:22:26.628427Z",
-      "fin": "2026-11-12T14:23:05.928411Z",
+      "inicio": "2026-11-12T21:52:03.416729Z",
+      "fin": "2026-11-12T21:55:03.540388Z",
       "tareas": [
         {
           "tarea": "verificar",
           "estado": "success",
-          "duracion_s": 0.973742
+          "duracion_s": 1.442191
         },
         {
           "tarea": "entrenar",
           "estado": "success",
-          "duracion_s": 32.046037
+          "duracion_s": 171.974214
         },
         {
           "tarea": "promover",
           "estado": "success",
-          "duracion_s": 1.091406
+          "duracion_s": 1.589695
         },
         {
           "tarea": "confirmar",
           "estado": "success",
-          "duracion_s": 0.918385
+          "duracion_s": 1.270114
         },
         {
           "tarea": "fin",
@@ -85,7 +85,7 @@
         {
           "tarea": "cerrar",
           "estado": "success",
-          "duracion_s": 0.182544
+          "duracion_s": 0.200171
         }
       ]
     }

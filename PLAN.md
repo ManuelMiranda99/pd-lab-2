@@ -329,11 +329,11 @@ observaciones de calidad" o en un rechazo con motivo.
 - [x] F8.5 **Auditoría de datos y credenciales** (vacío):
       `git log --all --name-only | grep -E '\.csv$|\.pdf$|(^|/)\.env$|^data/'`.
 - [x] F8.6 Repo accesible al equipo docente.
-- [ ] F8.7 Ensayo final: `git clone --branch entrega-lab2` en carpeta nueva y levantar.
+- [x] F8.7 Ensayo final: `git clone` en carpeta nueva y levantar (repetido sobre `main` `0884e97` tras los fixes de evaluación).
 - [ ] F8.8 `git tag -a entrega-lab2` sobre `main` tras el último squash, **antes de la fecha límite**;
       `git push origin entrega-lab2`; verificar con `gh api …/git/refs/tags/entrega-lab2`.
 - [ ] F8.9 Entregar en el GES solo el enlace.
-- [ ] F8.10 Repaso personal: poder explicar y justificar cada módulo y decisión.
+- [~] F8.10 Repaso personal: poder explicar y justificar cada módulo y decisión.
 
 ---
 
