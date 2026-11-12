@@ -287,3 +287,10 @@ Toda la fase en una pasada, en la rama `feat/reentrenamiento` → PR #10 (squash
 ### Próxima sesión
 - Empezar por: **Fase 7** — F7.1 `scripts/smoke.py`
   (puede reutilizar el envío de solicitudes/observaciones usado hoy) y F7.3 simulador sin fuga.
+
+---
+
+## Sesión 2026-11-11 — Fase 7 (inicio)
+**Fase:** 7 — Simulador, smoke y pruebas end-to-end
+**Estado al cerrar:** _(sesión abierta)_
+**Plan del día:** recrear volúmenes locales (quitar observaciones de prueba y v7), F7.1, F7.3, F7.4, F7.5

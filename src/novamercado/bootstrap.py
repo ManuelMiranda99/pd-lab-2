@@ -2,7 +2,8 @@
 
 Bajo un `pg_advisory_lock`:
 1. migra el esquema;
-2. carga los CSV publicados en una transacción con marcador (si no estaban);
+2. carga los CSV publicados en una transacción con marcador (si no estaban); con
+   `HISTORICO_HASTA` (solo simulador/smoke) recorta el histórico a esa fecha;
 3. consulta el alias en MLflow:
    - existe → no hace nada más;
    - hay versiones pero ninguna con alias → asigna el alias a la última (no reentrena);
@@ -69,14 +70,20 @@ def main(cfg: Config | None = None) -> int:
     )
     cfg = cfg or Config.desde_entorno()
     t0 = time.monotonic()
+    if cfg.historico_hasta is not None:
+        log.warning(
+            "MODO SIMULACIÓN: se carga el histórico solo hasta %s (HISTORICO_HASTA). "
+            "No usar en la evaluación.",
+            cfg.historico_hasta,
+        )
     esperar_bd(cfg.db_url)
     with bloqueo_consultivo(cfg.db_url):
         with conectar(cfg.db_url) as conn:
             aplicadas = migrar(conn)
             log.info("Migraciones aplicadas: %s", aplicadas or "ninguna (al día)")
             try:
-                carga = cargar_datos(conn, cfg.datos_dir)
-            except ArchivosFaltantes as exc:
+                carga = cargar_datos(conn, cfg.datos_dir, hasta=cfg.historico_hasta)
+            except (ArchivosFaltantes, ValueError) as exc:
                 log.error("%s", exc)
                 return 2
             log.info("Datos: %s (%s)", "cargados" if carga.cargado else "ya estaban", carga.filas)

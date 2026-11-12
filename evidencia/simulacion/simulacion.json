@@ -1,0 +1,317 @@
+{
+  "configuracion": {
+    "proyecto": "novamercado-sim2",
+    "levantar": true,
+    "corte": "2025-10-31",
+    "inicio": "2025-11-28",
+    "fin": "2026-02-28",
+    "choque": 1.2,
+    "choque_desde": "2026-02-01",
+    "reentrenar_cada": 14,
+    "caida_mlflow": "2026-01-10",
+    "reinicio": "2026-01-24",
+    "prob_error": 0.2,
+    "prob_repetida": 0.1,
+    "semilla": 2026
+  },
+  "duracion_s": 621.2,
+  "dias_simulados": 93,
+  "filas_predichas": 11160,
+  "costo": {
+    "modelo": 352937,
+    "baseline": 523125,
+    "diferencia_relativa": -0.3253
+  },
+  "costo_por_mes": {
+    "2025-11": {
+      "modelo": 11711,
+      "baseline": 15886
+    },
+    "2025-12": {
+      "modelo": 127742,
+      "baseline": 184164
+    },
+    "2026-01": {
+      "modelo": 91610,
+      "baseline": 177338
+    },
+    "2026-02": {
+      "modelo": 121874,
+      "baseline": 145736
+    }
+  },
+  "costo_por_familia": {
+    "abarrotes": {
+      "modelo": 49321,
+      "baseline": 68110
+    },
+    "bebe": {
+      "modelo": 3865,
+      "baseline": 5736
+    },
+    "bebidas": {
+      "modelo": 37752,
+      "baseline": 62210
+    },
+    "carnes": {
+      "modelo": 53382,
+      "baseline": 83375
+    },
+    "cuidado_personal": {
+      "modelo": 7020,
+      "baseline": 10751
+    },
+    "frutas_verduras": {
+      "modelo": 53721,
+      "baseline": 77287
+    },
+    "lacteos": {
+      "modelo": 52848,
+      "baseline": 71666
+    },
+    "licores": {
+      "modelo": 7731,
+      "baseline": 15233
+    },
+    "limpieza": {
+      "modelo": 8374,
+      "baseline": 13826
+    },
+    "mascotas": {
+      "modelo": 3465,
+      "baseline": 4431
+    },
+    "panaderia": {
+      "modelo": 53154,
+      "baseline": 76009
+    },
+    "snacks": {
+      "modelo": 22303,
+      "baseline": 34491
+    }
+  },
+  "metricas_modelo": {
+    "mae": 45.0144,
+    "rmse": 88.4764,
+    "wape": 0.1898,
+    "sesgo": -13.4539
+  },
+  "metricas_baseline": {
+    "mae": 66.7565,
+    "rmse": 124.5333,
+    "wape": 0.2815,
+    "sesgo": -10.0605
+  },
+  "versiones_usadas": {
+    "1": 5040,
+    "4": 5040,
+    "7": 1080
+  },
+  "reentrenos": [
+    {
+      "despues_de": "2025-12-11",
+      "segundos": 48.5,
+      "estado": "exitoso",
+      "promovido": false,
+      "version": "1",
+      "motivo": "Costo en validación 49 996 vs 48 218 del vigente (+3.7 %, gana 0/2 ventanas): se conserva el vigente (mejora menor a 0.5 %; gana menos de la mitad de las ventanas)"
+    },
+    {
+      "despues_de": "2025-12-25",
+      "segundos": 60.5,
+      "estado": "exitoso",
+      "promovido": false,
+      "version": "1",
+      "motivo": "Costo en validación 81 043 vs 80 095 del vigente (+1.2 %, gana 1/3 ventanas): se conserva el vigente (mejora menor a 0.5 %; gana menos de la mitad de las ventanas)"
+    },
+    {
+      "despues_de": "2026-01-08",
+      "segundos": 69.7,
+      "estado": "exitoso",
+      "promovido": true,
+      "version": "4",
+      "motivo": "Costo en validación 80 938 vs 85 749 del vigente (−5.6 %, gana 2/3 ventanas): promovido",
+      "segundos_hasta_en_uso": 4.0
+    },
+    {
+      "despues_de": "2026-01-22",
+      "segundos": 60.6,
+      "estado": "exitoso",
+      "promovido": false,
+      "version": "4",
+      "motivo": "Costo en validación 40 336 vs 40 320 del vigente (+0.0 %, gana 1/2 ventanas): se conserva el vigente (mejora menor a 0.5 %)"
+    },
+    {
+      "despues_de": "2026-02-05",
+      "segundos": 75.7,
+      "estado": "exitoso",
+      "promovido": false,
+      "version": "4",
+      "motivo": "Costo en validación 73 269 vs 73 520 del vigente (−0.3 %, gana 2/3 ventanas): se conserva el vigente (mejora menor a 0.5 %)"
+    },
+    {
+      "despues_de": "2026-02-19",
+      "segundos": 72.6,
+      "estado": "exitoso",
+      "promovido": true,
+      "version": "7",
+      "motivo": "Costo en validación 88 602 vs 94 566 del vigente (−6.3 %, gana 2/3 ventanas): promovido",
+      "segundos_hasta_en_uso": 0.0
+    }
+  ],
+  "eventos": [
+    {
+      "tipo": "arranque",
+      "segundos": 97.2,
+      "modelo": {
+        "nombre": "novamercado",
+        "alias": "champion",
+        "version": "1"
+      }
+    },
+    {
+      "tipo": "corte_verificado",
+      "fecha_max_modelo": "2025-10-31",
+      "corte": "2025-10-31"
+    },
+    {
+      "tipo": "mlflow_detenido",
+      "fecha": "2026-01-10",
+      "segundos_hasta_degradado": 1.0192014159983955
+    },
+    {
+      "tipo": "mlflow_iniciado",
+      "fecha": "2026-01-10",
+      "segundos_hasta_ok": 6.051435958001093
+    },
+    {
+      "tipo": "down_up",
+      "fecha": "2026-01-24",
+      "segundos": 28.4,
+      "modelo": {
+        "nombre": "novamercado",
+        "alias": "champion",
+        "version": "4"
+      }
+    }
+  ],
+  "codigos_http": {
+    "estado_reentreno 200": 134,
+    "health 200": 15,
+    "health 503": 26,
+    "modelo 200": 19,
+    "observaciones 200": 1093,
+    "prediccion 200": 1379,
+    "prediccion 422": 186,
+    "reentrenar 202": 6,
+    "reentrenar 503": 1
+  },
+  "errores_inyectados": {
+    "obs_E01": 25,
+    "obs_E04": 14,
+    "obs_E07": 17,
+    "obs_E08": 85,
+    "obs_E09": 87,
+    "obs_E10": 28,
+    "obs_inv_tipos": 24,
+    "pred_E01": 28,
+    "pred_E02": 21,
+    "pred_E03": 22,
+    "pred_E04": 27,
+    "pred_E05": 31,
+    "pred_E06": 46,
+    "pred_E07": 27,
+    "pred_cuerpo_binario": 5,
+    "pred_cuerpo_json_roto": 11,
+    "pred_cuerpo_lista": 9,
+    "pred_cuerpo_null": 7,
+    "pred_cuerpo_texto_plano": 11,
+    "pred_cuerpo_vacio": 8,
+    "pred_inv_camel_case": 16,
+    "pred_inv_claves_extra": 28,
+    "pred_inv_familia_desconocida": 47,
+    "pred_inv_fecha_imposible": 38,
+    "pred_inv_orden": 31,
+    "pred_inv_promocion_fuera_de_dominio": 31,
+    "pred_inv_sin_familias": 37,
+    "pred_inv_sin_tienda": 34,
+    "pred_inv_tienda_inexistente": 26,
+    "pred_repetida": 94
+  },
+  "chequeos": {
+    "E01 equivalente:ok": 28,
+    "E02 equivalente:ok": 21,
+    "E03 equivalente:ok": 22,
+    "E04 equivalente:ok": 27,
+    "E05 sin 500:ok": 31,
+    "E06 sin 500:ok": 46,
+    "E07 equivalente:ok": 27,
+    "E08 guarda 11 y advierte:ok": 85,
+    "E09 reenvío idéntico guarda 0:ok": 87,
+    "MLflow caído → degradado < 1 min:ok": 1,
+    "MLflow de vuelta → ok < 2 min:ok": 1,
+    "arranque en frío → ok ≤ 10 min:ok": 1,
+    "corrección tras E08 guarda 1:ok": 85,
+    "cuerpo binario → 422:ok": 5,
+    "cuerpo json_roto → 422:ok": 11,
+    "cuerpo lista → 422:ok": 9,
+    "cuerpo null → 422:ok": 7,
+    "cuerpo texto_plano → 422:ok": 11,
+    "cuerpo vacio → 422:ok": 8,
+    "down/up conserva el modelo:ok": 1,
+    "down/up → ok ≤ 10 min:ok": 1,
+    "inv_camel_case equivalente:ok": 16,
+    "inv_claves_extra equivalente:ok": 28,
+    "inv_familia_desconocida sin 500:ok": 47,
+    "inv_fecha_imposible → 422:ok": 38,
+    "inv_orden equivalente:ok": 31,
+    "inv_promocion_fuera_de_dominio sin 500:ok": 31,
+    "inv_sin_familias sin 500:ok": 37,
+    "inv_sin_tienda → 422:ok": 34,
+    "inv_tienda_inexistente → 422:ok": 26,
+    "modelo inicial sin datos posteriores al corte:ok": 1,
+    "modelo promovido en uso ≤ 2 min:ok": 2,
+    "observación guarda todo:ok": 835,
+    "predicción limpia ok:ok": 930,
+    "reentreno con MLflow caído → 503:ok": 1,
+    "reentreno exitoso:ok": 6,
+    "reentreno ≤ 10 min:ok": 6,
+    "sin promoción el vigente no cambia:ok": 4,
+    "solicitud repetida → mismas predicciones:ok": 94,
+    "tras down/up las observaciones persisten:ok": 1
+  },
+  "problemas_de_contrato": [],
+  "fallas": [],
+  "latencias": {
+    "health": {
+      "n": 41,
+      "p50_ms": 3.3,
+      "p95_ms": 11.2
+    },
+    "modelo": {
+      "n": 19,
+      "p50_ms": 2.3,
+      "p95_ms": 5.7
+    },
+    "prediccion": {
+      "n": 1565,
+      "p50_ms": 133.8,
+      "p95_ms": 146.3
+    },
+    "observaciones": {
+      "n": 1093,
+      "p50_ms": 10.9,
+      "p95_ms": 13.4
+    },
+    "reentrenar": {
+      "n": 7,
+      "p50_ms": 35.1,
+      "p95_ms": 63.2
+    },
+    "estado_reentreno": {
+      "n": 134,
+      "p50_ms": 19.7,
+      "p95_ms": 29.6
+    }
+  }
+}
