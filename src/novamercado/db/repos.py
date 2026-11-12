@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
@@ -13,6 +15,10 @@ from psycopg.types.json import Jsonb
 ESTADOS_TERMINALES = ("exitoso", "fallido")
 
 
+#: Clave de `pg_advisory_lock` que serializa el alta de reentrenamientos (DECISIONES §6.1).
+CLAVE_BLOQUEO_REENTRENO = 7_204_001
+
+
 @dataclass(frozen=True)
 class Reentrenamiento:
     id: str
@@ -20,6 +26,16 @@ class Reentrenamiento:
     promovido: bool | None
     version: str | None
     motivo: str | None
+    detalle: dict[str, Any] = field(default_factory=dict)
+    #: Segundos desde el alta, medidos con `now()` de Postgres (no con el reloj de la API).
+    segundos: float = 0.0
+
+
+_SQL_REENTRENO = """
+SELECT id, estado, promovido, version, motivo, COALESCE(detalle, '{}'::jsonb),
+       EXTRACT(EPOCH FROM now() - creado_en)::float8
+  FROM reentrenamientos
+"""
 
 
 def crear_reentrenamiento(conn: psycopg.Connection, id_: str) -> None:
@@ -31,12 +47,52 @@ def crear_reentrenamiento(conn: psycopg.Connection, id_: str) -> None:
 
 
 def obtener_reentrenamiento(conn: psycopg.Connection, id_: str) -> Reentrenamiento | None:
+    fila = conn.execute(_SQL_REENTRENO + " WHERE id = %s", (id_,)).fetchone()
+    conn.commit()
+    return Reentrenamiento(*fila) if fila else None
+
+
+def reentrenamiento_en_curso(conn: psycopg.Connection) -> Reentrenamiento | None:
+    """La ejecución `en_curso` más reciente, si hay alguna."""
     fila = conn.execute(
-        "SELECT id, estado, promovido, version, motivo FROM reentrenamientos WHERE id = %s",
-        (id_,),
+        _SQL_REENTRENO + " WHERE estado = 'en_curso' ORDER BY creado_en DESC, id LIMIT 1"
     ).fetchone()
     conn.commit()
     return Reentrenamiento(*fila) if fila else None
+
+
+@contextmanager
+def bloqueo_reentrenos(conn: psycopg.Connection) -> Iterator[None]:
+    """Bloqueo consultivo de sesión: dos altas simultáneas no crean dos ejecuciones.
+
+    Es de sesión (no de transacción) porque dentro se hacen varias consultas con `commit`; si la
+    conexión se corta, Postgres lo libera solo.
+    """
+    conn.execute("SELECT pg_advisory_lock(%s)", (CLAVE_BLOQUEO_REENTRENO,))
+    conn.commit()
+    try:
+        yield
+    finally:
+        try:
+            conn.execute("SELECT pg_advisory_unlock(%s)", (CLAVE_BLOQUEO_REENTRENO,))
+            conn.commit()
+        except psycopg.Error:
+            pass  # conexión rota: el bloqueo ya se liberó con ella
+
+
+def actualizar_detalle(conn: psycopg.Connection, id_: str, cambios: dict[str, Any]) -> bool:
+    """Mezcla `cambios` en `detalle` de una ejecución aún `en_curso`. Devuelve si escribió."""
+    with conn.transaction():
+        cur = conn.execute(
+            """
+            UPDATE reentrenamientos
+               SET detalle = COALESCE(detalle, '{}'::jsonb) || %s::jsonb,
+                   actualizado_en = now()
+             WHERE id = %s AND estado = 'en_curso'
+            """,
+            (json.dumps(cambios, default=str), id_),
+        )
+        return cur.rowcount > 0
 
 
 def terminar_reentrenamiento(
@@ -49,7 +105,10 @@ def terminar_reentrenamiento(
     motivo: str,
     detalle: dict[str, Any] | None = None,
 ) -> bool:
-    """Marca una ejecución como terminada si aún no lo estaba. Devuelve si escribió."""
+    """Marca una ejecución como terminada si aún no lo estaba. Devuelve si escribió.
+
+    `detalle` se mezcla con el que ya tenía (el resultado provisional de las etapas se conserva).
+    """
     if estado not in ESTADOS_TERMINALES:
         raise ValueError(f"Estado terminal inválido: {estado}")
     with conn.transaction():
@@ -57,10 +116,10 @@ def terminar_reentrenamiento(
             """
             UPDATE reentrenamientos
                SET estado = %s, promovido = %s, version = %s, motivo = %s,
-                   detalle = %s, actualizado_en = now()
+                   detalle = COALESCE(detalle, '{}'::jsonb) || %s::jsonb, actualizado_en = now()
              WHERE id = %s AND estado = 'en_curso'
             """,
-            (estado, promovido, version, motivo, json.dumps(detalle or {}), id_),
+            (estado, promovido, version, motivo, json.dumps(detalle or {}, default=str), id_),
         )
         return cur.rowcount > 0
 

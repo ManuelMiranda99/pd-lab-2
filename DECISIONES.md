@@ -330,6 +330,30 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
   (10 CPU) ~50 s; en Docker, el DAG completo tarda ~76 s y el arranque en frío deja `/health` en
   `ok` a los 106 s.
 
+### 4.4 Cambios de demanda: reentrenar y recalibrar `q_f`, sin ponderar lo reciente
+- **Decisión:** todas las filas pesan igual al entrenar (`VIDA_MEDIA_DIAS = None` en
+  `modelo/hgb.py`; se registra en MLflow como `vida_media_dias`). Lo que adapta el modelo a un
+  cambio de demanda es el ciclo: lags al nivel del último dato, `q_f` recalibrado en cada
+  reentreno con los 56 días previos al corte, y el criterio de §4.2 que promueve al retador
+  cuando el vigente se queda atrás.
+- **Alternativas:** peso exponencial por antigüedad con vida media de 90, 180, 365 o 730 días
+  (implementado y configurable: `pesos_recencia`); ventana de entrenamiento móvil.
+- **Evidencia** (`scripts/evaluar_recencia.py` → `evidencia/modelo/recencia.json`; costo a un
+  paso después del corte; choque de nivel desde 2025-12-01 y corte el 2026-01-15):
+
+| Escenario | Baseline | Vigente congelado (antes del choque) | Sin ponderar | 730 d | 365 d | 180 d | 90 d |
+|---|---|---|---|---|---|---|---|
+| Normal (ene–feb 2026) | 310 576 | — | 178 418 | 177 337 | 178 312 | 178 513 | 181 254 |
+| Choque −20 % | 152 727 | 120 032 | **115 384** | 115 724 | 117 890 | 117 536 | 120 820 |
+| Choque +20 % | 238 657 | 179 743 | **173 924** | 173 418 | 174 330 | 175 267 | 177 223 |
+
+- **Justificación:** reentrenar después del choque baja el costo 3.9 % (−20 %) y 3.2 % (+20 %)
+  frente al vigente congelado, y ese margen supera el umbral de §4.2, así que el ciclo lo
+  promueve. Ponderar con 730 días cambia el costo entre −0.6 % y +0.3 %, dentro del ruido del
+  placebo de §4.2 (±0.8 %), y las vidas medias cortas empeoran en los tres escenarios: tiran
+  información de estacionalidad (diciembre, Semana Santa) que solo está en el año anterior. Los
+  lags ya llevan el nivel nuevo, así que el peso no agrega nada.
+
 ## 5. Stack y operación
 
 ### 5.1 Airflow 3.3.2 con LocalExecutor
@@ -428,10 +452,12 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
 ### 6.1 `POST /admin/reentrenar` con una ejecución en curso → 202 con el id de esa ejecución
 - **Decisión:** si ya hay una ejecución `en_curso`, la API responde **202 con el `id` de esa misma
   ejecución** y no dispara otra. Para que dos solicitudes simultáneas no creen dos ejecuciones, la
-  verificación y el alta se hacen en una transacción con `pg_advisory_xact_lock`. Una fila
-  `en_curso` que supera el límite de la ejecución (`dagrun_timeout` de 9 min más un margen) se
-  verifica contra Airflow. Si ya no corre, se marca `fallido` y se dispara una nueva. El tiempo se
+  verificación y el alta se hacen bajo un `pg_advisory_lock` de sesión (no de transacción, porque
+  en medio hay varias consultas con `commit`; si la conexión se corta, Postgres lo libera). Antes
+  de devolver el id, la fila `en_curso` se confirma contra Airflow con las mismas reglas que
+  `GET` (§6.5): si el run ya terminó o venció, se cierra y se dispara uno nuevo. El tiempo se
   mide con las marcas de la BD (`now()` de Postgres), no para validar fechas de negocio.
+  **Implementado en la Fase 6** (`servicio/reentreno.iniciar`; prueba con 6 POST simultáneos).
 - **Alternativas:** 503 ("no se puede iniciar"); 202 con un id nuevo que queda en cola detrás del
   actual (`max_active_runs=1`).
 - **Justificación:** el contrato reserva el 503 para "no se puede iniciar". Aquí sí hay un
@@ -442,8 +468,8 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
   ejecución entran en el siguiente reentreno.
 
 ### 6.2 MLflow, Airflow o la BD caídos → 503
-- **Decisión:** antes de disparar, la API comprueba MLflow (`GET /health`, timeout de 3 s) y
-  dispara el DAG en Airflow (timeout de 5 s). Si alguno no responde, si el DAG no existe o está
+- **Decisión:** antes de disparar, la API comprueba MLflow (el chequeo de salud de cada 10 s) y
+  que el DAG exista y no esté pausado, y luego lo dispara en Airflow (timeout de 5 s). Si alguno no responde, si el DAG no existe o está
   pausado, o si la BD no está disponible, responde **503** con un `detail` que nombra la
   dependencia. La fila de `reentrenamientos` se crea antes de disparar. Si el disparo falla, queda
   como `fallido` con el motivo (sirve de auditoría), pero el id no se devuelve.
@@ -472,3 +498,45 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
   falta ante cambios de demanda. Un valor supuesto por E05 no es un dato de la tienda, y usarlo
   para entrenar sería inventar datos. Al predecir, la promoción siempre viene en la solicitud, así
   que el NULL solo aparece al entrenar.
+
+### 6.4 Orden de escritura del DAG: registrar → provisional → alias → `exitoso`
+- **Decisión:** el DAG tiene cinco tareas que solo llaman a `novamercado.modelo.etapas`:
+  `verificar` (la fila existe —un disparo manual desde Airflow la crea—, hay datos y MLflow
+  responde; guarda la versión con alias al empezar) → `entrenar` (lee histórico + observaciones de
+  la BD con las promociones de §6.3, entrena, evalúa con §4 y **registra la versión sin mover el
+  alias**; guarda en `reentrenamientos.detalle` el resultado provisional) → `promover` (mueve
+  `champion` solo si el criterio lo decidió **y** el alias sigue en la versión del inicio) →
+  `confirmar` (escribe `exitoso` con la versión que tiene el alias al terminar). `cerrar`
+  (`all_done`) corre siempre: si la fila sigue `en_curso`, la cierra como `fallido` con la etapa
+  y el error, o como `exitoso` si el alias ya se había movido. `fin` (vacía, tras `confirmar`)
+  deja el dag run en `failed` cuando falla una etapa. Ninguna tarea tiene reintentos.
+- **Alternativas:** una sola tarea que hace todo (Fase 1); pasar el panel o el modelo entre
+  tareas por XCom o por disco; `on_failure_callback` en vez de una tarea final; mover el alias
+  antes de escribir el resultado.
+- **Justificación:** con el resultado provisional guardado antes de mover el alias, cualquier
+  corte deja un estado explicable: si se cae antes de `promover`, el alias no se tocó y la fila
+  queda `fallido`; si se cae después, el modelo nuevo ya está en uso y la fila dice `exitoso` con
+  `promovido: true`, en vez de un `fallido` falso. Extraer y entrenar van en una sola tarea porque
+  pasar ~83 000 filas o el modelo entre procesos agrega tiempo y otro punto de fallo sin ganar
+  nada; la separación que importa es la de registrar y promover. Una tarea `all_done` deja
+  registro en la interfaz de Airflow y se prueba como cualquier otra; un callback no. Comprobar
+  que el alias no cambió evita pisar una promoción hecha a mano durante el reentreno.
+- **Medido en Docker:** sin días nuevos, 36 s (`exitoso`, no promueve: "Solo 0 días evaluables…");
+  con 14 días de observaciones y un choque de +25 %, 55 s y promueve (−1.9 % frente al vigente); el
+  modelo nuevo ya estaba en uso al leer el estado (poller de 20 s). MLflow detenido a mitad de
+  `entrenar`: `fallido` a los 25 s con "Falló la etapa 'entrenar': MLflow no respondió", alias sin
+  cambios y dag run `failed`.
+
+### 6.5 Estado de una ejecución en `GET /admin/reentrenar/{id}`
+- **Decisión:** fila terminal → se devuelve tal cual. Fila `en_curso` → se consulta Airflow: run
+  `queued`/`running`/`up_for_retry` → `en_curso`; `failed`, o `success` sin resultado → la API la
+  cierra con las mismas reglas que `cerrar` (`exitoso` si el alias ya se movió, si no `fallido`
+  con la etapa y el error). Airflow caído o sin el run → `en_curso` hasta 11 min desde el alta
+  (`dagrun_timeout` de 9 min + margen) y después `fallido` por vencimiento. `promovido`,
+  `version` y `motivo` van en `exitoso` y en `fallido` y se omiten en `en_curso`; `version` es
+  siempre la del alias vigente al terminar, aunque no se promueva.
+- **Alternativas:** devolver `en_curso` mientras Airflow no responda, sin límite; cerrar solo
+  desde el DAG.
+- **Justificación:** el evaluador espera un estado terminal en ≤ 10 min. Si el dag run muere por
+  `dagrun_timeout`, `cerrar` no llega a correr, y sin este cierre la fila quedaría `en_curso` para
+  siempre y bloquearía nuevos reentrenos (§6.1).

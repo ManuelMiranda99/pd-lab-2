@@ -33,6 +33,8 @@ def _airflow(estado_disparo: int = 200) -> AirflowClient:
             return httpx.Response(201, json={"access_token": "t"})
         if request.method == "POST":
             return httpx.Response(estado_disparo, json={})
+        if request.url.path == "/api/v2/dags/reentrenamiento":
+            return httpx.Response(200, json={"is_paused": False})
         return httpx.Response(200, json={"state": "running"})
 
     return AirflowClient("http://airflow", "u", "p", transporte=httpx.MockTransport(manejar))

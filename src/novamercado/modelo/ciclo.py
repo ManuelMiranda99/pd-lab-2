@@ -1,7 +1,8 @@
 """Ciclo de entrenamiento: entrenar retador, compararlo con el vigente, registrar y promover.
 
-Lo usan el bootstrap (primer modelo) y el DAG `reentrenamiento`. Nunca lo usa la API.
-Orden de escritura: registrar versión → mover alias (solo si gana) → resultado en la BD.
+Lo usan el bootstrap (primer modelo) y el DAG `reentrenamiento` (a través de `modelo.etapas`).
+Nunca lo usa la API. El bootstrap registra y mueve el alias en un paso; el DAG registra aquí sin
+mover el alias y lo mueve en una etapa aparte, después de guardar el resultado provisional.
 Retador: HGB Poisson con cuantil por familia (`modelo.hgb`), evaluado con origen móvil contra el
 vigente y el baseline (`modelo.validacion`) y decidido con el criterio de §4.2 (`modelo.criterio`).
 Un fallo o un retador que no gana **no** tocan el alias.
@@ -25,7 +26,7 @@ from novamercado.db.conexion import conectar
 from novamercado.features.panel import leer_contexto, leer_historia
 from novamercado.modelo.baseline import ajustar_baseline
 from novamercado.modelo.criterio import Decision, decidir_reemplazo
-from novamercado.modelo.hgb import DIAS_CALIBRACION, HIPERPARAMETROS, ModeloHGB
+from novamercado.modelo.hgb import DIAS_CALIBRACION, HIPERPARAMETROS, VIDA_MEDIA_DIAS, ModeloHGB
 from novamercado.modelo.validacion import entrenar_y_evaluar
 
 log = logging.getLogger(__name__)
@@ -33,11 +34,12 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class Resultado:
-    promovido: bool
-    version: str | None  # versión vigente (con alias) al terminar
+    promovido: bool  # decisión del criterio (con `mover_alias=False`, el alias aún no se movió)
+    version: str | None  # versión con alias al terminar esta función
     version_registrada: str | None
     motivo: str
     detalle: dict[str, Any] = field(default_factory=dict)
+    version_previa: str | None = None  # versión con alias al empezar (None en arranque en frío)
 
 
 def _commit_git() -> str:
@@ -84,12 +86,15 @@ def _metricas_por_familia(prefijo: str, valores: dict[str, float]) -> dict[str, 
     return {f"{prefijo}_{f}": float(v) for f, v in sorted(valores.items())}
 
 
-def entrenar_y_registrar(cfg: Config, *, id_reentreno: str | None, comparar: bool) -> Resultado:
+def entrenar_y_registrar(
+    cfg: Config, *, id_reentreno: str | None, comparar: bool, mover_alias: bool = True
+) -> Resultado:
     """Entrena el retador, lo evalúa contra vigente y baseline (§4) y lo registra con su linaje.
 
-    Orden: registrar la versión → mover el alias solo si la decisión lo permite. Sin vigente y
-    con un retador que no mejora al baseline, se registra y promueve el baseline (el servicio
-    necesita un modelo). Cualquier excepción sale antes de tocar el alias.
+    Orden: registrar la versión → mover el alias solo si la decisión lo permite (y si
+    `mover_alias`). Sin vigente y con un retador que no mejora al baseline, se registra y
+    promueve el baseline (el servicio necesita un modelo). Cualquier excepción sale antes de
+    tocar el alias.
     """
     import mlflow
     from mlflow import MlflowClient
@@ -155,6 +160,7 @@ def entrenar_y_registrar(cfg: Config, *, id_reentreno: str | None, comparar: boo
         if isinstance(final, ModeloHGB):
             params.update({f"hgb_{k}": v for k, v in HIPERPARAMETROS.items()})
             params["dias_calibracion"] = DIAS_CALIBRACION
+            params["vida_media_dias"] = VIDA_MEDIA_DIAS if VIDA_MEDIA_DIAS else "sin_ponderar"
             params["fecha_corte"] = str(final.fecha_corte.date()) if final.fecha_corte else ""
         mlflow.log_params(params)
         metricas: dict[str, float] = {
@@ -187,14 +193,16 @@ def entrenar_y_registrar(cfg: Config, *, id_reentreno: str | None, comparar: boo
 
     cliente = MlflowClient(tracking_uri=cfg.mlflow_uri, registry_uri=cfg.mlflow_uri)
     cliente.set_model_version_tag(cfg.modelo_nombre, version, "promovido", str(decision.promover))
-    version_vigente = vigente.version if vigente else None
-    if decision.promover:
+    version_previa = vigente.version if vigente else None
+    version_vigente = version_previa
+    if decision.promover and mover_alias:
         cliente.set_registered_model_alias(cfg.modelo_nombre, cfg.modelo_alias, version)
         version_vigente = version
     return Resultado(
         promovido=decision.promover,
         version=version_vigente,
         version_registrada=version,
+        version_previa=version_previa,
         motivo=decision.motivo,
         detalle={
             "costo_retador": comp.total_retador if comp.retador else None,
@@ -205,39 +213,3 @@ def entrenar_y_registrar(cfg: Config, *, id_reentreno: str | None, comparar: boo
             **res.tecnicas,
         },
     )
-
-
-def ejecutar_reentrenamiento(id_reentreno: str, cfg: Config | None = None) -> dict[str, Any]:
-    """Punto de entrada del DAG: entrena, decide y escribe el resultado en `reentrenamientos`."""
-    cfg = cfg or Config.desde_entorno()
-    res = entrenar_y_registrar(cfg, id_reentreno=id_reentreno, comparar=True)
-    with conectar(cfg.db_url) as conn:
-        repos.terminar_reentrenamiento(
-            conn,
-            id_reentreno,
-            estado="exitoso",
-            promovido=res.promovido,
-            version=res.version,
-            motivo=res.motivo,
-            detalle={**res.detalle, "version_registrada": res.version_registrada},
-        )
-    return {"promovido": res.promovido, "version": res.version, "motivo": res.motivo}
-
-
-def marcar_fallido(id_reentreno: str, motivo: str, cfg: Config | None = None) -> None:
-    """Registra el fallo con la versión vigente (si se puede consultar); no toca el alias."""
-    cfg = cfg or Config.desde_entorno()
-    version: str | None = None
-    try:
-        from mlflow import MlflowClient
-
-        cliente = MlflowClient(tracking_uri=cfg.mlflow_uri, registry_uri=cfg.mlflow_uri)
-        version = str(
-            cliente.get_model_version_by_alias(cfg.modelo_nombre, cfg.modelo_alias).version
-        )
-    except Exception:  # noqa: BLE001 — MLflow caído: el fallo se registra igual
-        log.warning("No se pudo consultar la versión vigente al registrar el fallo")
-    with conectar(cfg.db_url) as conn:
-        repos.terminar_reentrenamiento(
-            conn, id_reentreno, estado="fallido", promovido=False, version=version, motivo=motivo
-        )

@@ -1,16 +1,12 @@
-"""`POST /admin/reentrenar` y `GET /admin/reentrenar/{id}`.
+"""`POST /admin/reentrenar` y `GET /admin/reentrenar/{id}` (la lógica vive en
+`novamercado.servicio.reentreno`).
 
 - El id lo genera la API (`uuid4().hex`) y es también el `dag_run_id` de Airflow.
-- La fila se crea en `reentrenamientos` **antes** de disparar; si Airflow rechaza o no responde,
-  la fila queda `fallido` y se responde 503.
-- Con un reentreno ya en curso se responde 202 y el run queda en cola (`max_active_runs=1`).
-- Con MLflow caído se responde 503 (el entrenamiento fallaría).
+- Con un reentreno ya en curso se responde 202 con **el id de esa ejecución** (DECISIONES §6.1).
+- MLflow, Airflow o la BD caídos, o el DAG pausado → 503 con el motivo (DECISIONES §6.2).
 """
 
 from __future__ import annotations
-
-import logging
-import uuid
 
 import psycopg
 from fastapi import APIRouter, HTTPException
@@ -19,10 +15,8 @@ from fastapi.responses import JSONResponse
 from api.dependencias import ServicioDep, abrir_conexion
 from novamercado.contrato import ReentrenoIniciado, ReentrenoStatus
 from novamercado.db import repos
-from novamercado.servicio.airflow import AirflowNoDisponible
-from novamercado.servicio.reentreno import resolver_estado
+from novamercado.servicio import reentreno
 
-log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 _BD_CAIDA = "Base de datos no disponible"
@@ -30,40 +24,36 @@ _BD_CAIDA = "Base de datos no disponible"
 
 @router.post("/reentrenar", status_code=202)
 def reentrenar(servicio: ServicioDep) -> JSONResponse:
-    if not servicio.monitor.estado.componentes.get("mlflow", False):
-        raise HTTPException(status_code=503, detail="MLflow no disponible: no se puede reentrenar")
-    id_ = uuid.uuid4().hex
+    actual = servicio.gestor.actual
     with abrir_conexion(servicio) as conn:
         try:
-            repos.crear_reentrenamiento(conn, id_)
+            alta = reentreno.iniciar(
+                conn,
+                servicio.airflow,
+                servicio.config.dag_id,
+                mlflow_disponible=servicio.monitor.estado.componentes.get("mlflow", False),
+                version_vigente=actual.version if actual else None,
+            )
+        except reentreno.NoSePuedeIniciar as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         except psycopg.Error as exc:
             raise HTTPException(status_code=503, detail=_BD_CAIDA) from exc
-        try:
-            servicio.airflow.disparar(servicio.config.dag_id, id_)
-        except AirflowNoDisponible as exc:
-            log.warning("No se pudo disparar el DAG: %s", exc)
-            actual = servicio.gestor.actual
-            repos.terminar_reentrenamiento(
-                conn,
-                id_,
-                estado="fallido",
-                promovido=False,
-                version=actual.version if actual else None,
-                motivo=f"No se pudo iniciar en Airflow: {exc}",
-            )
-            raise HTTPException(status_code=503, detail="Airflow no disponible") from exc
-    return JSONResponse(status_code=202, content=ReentrenoIniciado(id=id_).model_dump(mode="json"))
+    return JSONResponse(
+        status_code=202, content=ReentrenoIniciado(id=alta.id).model_dump(mode="json")
+    )
 
 
 @router.get("/reentrenar/{id_}")
 def estado_reentreno(id_: str, servicio: ServicioDep) -> JSONResponse:
     actual = servicio.gestor.actual
+    if "\x00" in id_:  # Postgres no admite NUL en texto: no puede existir
+        raise HTTPException(status_code=404, detail="No existe ese reentrenamiento")
     with abrir_conexion(servicio) as conn:
         try:
             fila = repos.obtener_reentrenamiento(conn, id_)
             if fila is None:
                 raise HTTPException(status_code=404, detail=f"No existe el reentrenamiento {id_}")
-            cuerpo = resolver_estado(
+            cuerpo = reentreno.resolver_estado(
                 conn,
                 fila,
                 servicio.airflow,

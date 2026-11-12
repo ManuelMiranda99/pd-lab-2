@@ -67,6 +67,30 @@ jobs:
       - name: Pytest
         run: pytest
 
+  dags:
+    name: dags
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Instalar Airflow (misma versión y constraints que la imagen)
+        run: |
+          python -m pip install --upgrade pip
+          pip install "apache-airflow==3.3.2" pytest==9.2.0 \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-3.3.2/constraints-3.11.txt"
+
+      - name: Pytest del DAG
+        env:
+          AIRFLOW_HOME: ${{ runner.temp }}/airflow
+          AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+        run: pytest -p no:cacheprovider tests/test_dags.py
+
   compose:
     name: compose
     runs-on: ubuntu-24.04

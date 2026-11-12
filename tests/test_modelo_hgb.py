@@ -291,3 +291,19 @@ def test_motivo_legible_con_ambos_costos_y_umbral_configurable():
         "Costo en validación 167 896 vs 169 132 del vigente (−0.7 %, gana 1/1 ventanas): promovido"
     )
     assert not decidir_reemplazo(comp, mejora_minima=0.01).promover
+
+
+def test_pesos_recencia_desde_el_corte_y_sin_ponderar_por_defecto():
+    import pandas as pd
+
+    from novamercado.modelo.hgb import VIDA_MEDIA_DIAS, pesos_recencia
+
+    fechas = pd.Series(pd.to_datetime(["2026-01-31", "2025-02-01", "2026-02-05"]))
+    corte = pd.Timestamp("2026-02-01")
+    pesos = pesos_recencia(fechas, corte, 365)
+    assert pesos is not None
+    assert pesos[0] == pytest.approx(0.5 ** (1 / 365))
+    assert pesos[1] == pytest.approx(0.5)
+    assert pesos[2] == 1.0  # fechas posteriores al corte (no se usan al entrenar) no pesan más
+    assert pesos_recencia(fechas, corte, None) is None
+    assert VIDA_MEDIA_DIAS is None  # DECISIONES §4.4: no ponderar

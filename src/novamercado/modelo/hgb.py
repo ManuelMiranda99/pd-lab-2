@@ -38,6 +38,9 @@ HIPERPARAMETROS: dict[str, Any] = {
     "l2_regularization": 1.0,
 }
 DIAS_CALIBRACION = 56
+#: Vida media (días) del peso de cada fila al entrenar: una fila de hace `VIDA_MEDIA_DIAS` pesa la
+#: mitad que la del día anterior al corte (DECISIONES §4.4). None = todas pesan igual.
+VIDA_MEDIA_DIAS: float | None = None
 #: Mínimo de filas de una familia en la ventana de calibración para estimar su cuantil.
 MIN_FILAS_CALIBRACION = 20
 NOMBRE = "hgb_poisson"
@@ -67,6 +70,17 @@ def calibrar_factores(
         q = float(np.quantile(grupo["r"], tau[familia]))
         factores[str(familia)] = float(np.clip(q, FACTOR_MIN, FACTOR_MAX))
     return factores
+
+
+def pesos_recencia(
+    fechas: pd.Series, antes_de: pd.Timestamp, vida_media_dias: float | None
+) -> np.ndarray | None:
+    """Peso `0.5 ** (antigüedad / vida_media)` por fila, con la antigüedad medida desde el corte
+    (no desde el reloj). None si no se pondera."""
+    if vida_media_dias is None:
+        return None
+    edad = (antes_de - pd.to_datetime(fechas)).dt.days.to_numpy(dtype=float)
+    return np.power(0.5, np.clip(edad, 0.0, None) / float(vida_media_dias))
 
 
 @dataclass
@@ -114,10 +128,12 @@ class RecetaHGB:
         costos: dict[str, tuple[float, float]],
         *,
         semilla: int = 0,
+        vida_media_dias: float | None = VIDA_MEDIA_DIAS,
     ) -> None:
         self.ctx = ctx
         self.costos = costos
         self.semilla = semilla
+        self.vida_media_dias = vida_media_dias
         self.entreno = variables_entrenamiento(historia, ctx, enmascarar=True, semilla=semilla)
         # Sin enmascarar: idénticas a las que se calculan al servir (para calibrar q_f).
         self.limpias = variables_entrenamiento(historia, ctx, enmascarar=False)
@@ -133,7 +149,11 @@ class RecetaHGB:
             early_stopping=False,
             random_state=self.semilla,
         )
-        return est.fit(filas[FEATURES], filas["ventas"].to_numpy(dtype=float))
+        return est.fit(
+            filas[FEATURES],
+            filas["ventas"].to_numpy(dtype=float),
+            sample_weight=pesos_recencia(filas["fecha"], antes_de, self.vida_media_dias),
+        )
 
     def factores(
         self,
