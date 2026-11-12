@@ -415,6 +415,7 @@ observaciones de calidad" o en un rechazo con motivo.
 - **Diciembre 2026** (24/31-dic hasta 4.8× en licores) es el mayor riesgo de costo si se evalúa (F2.2).
 - ~~RAM del stack~~ → **medido: 1.9 GB pico** con LocalExecutor y jobs de MLflow desactivados (F1.11, DECISIONES §5.5).
 - **Reentreno con uno en curso**: la Fase 1 responde 202 y encola un run nuevo; DECISIONES §6.1 dice 202 con el id del run en curso. Unificar en F6.3.
+- ~~Persistencia de la API~~ → **resuelto en Fase 4** (DECISIONES §5.11).
 - **Criterio de promoción provisional** (empate promueve, DECISIONES §5.10): reemplazar por §4 en F5.8.
 - **Checks requeridos progresivos**: agregar a la protección solo los jobs que ya existen.
 - ~~Protección de rama en repo privado~~ → **resuelto**: el repo `pd-lab-2` es público y `main` quedó protegida (F0.12).
