@@ -1,0 +1,157 @@
+{
+  "validacion": {
+    "dias": 59,
+    "filas": 7080,
+    "baseline": {
+      "wape": 0.2938629506296147,
+      "sesgo": 0.08683901227256952,
+      "costo_pred": 351651.9,
+      "costo_cuantil": 310576.0,
+      "cobertura_vs_tau": 0.09783284180093751,
+      "segundos": 0.0
+    },
+    "poisson": {
+      "wape": 0.1787409674621346,
+      "sesgo": -0.015104993247610943,
+      "costo_pred": 237004.09999999998,
+      "costo_cuantil": 179224.1,
+      "cobertura_vs_tau": 0.02382154236590927,
+      "segundos": 18.7
+    },
+    "log_smearing": {
+      "wape": 0.17814676084682335,
+      "sesgo": -0.010412227994984091,
+      "costo_pred": 235118.69999999998,
+      "costo_cuantil": 179426.2,
+      "cobertura_vs_tau": 0.020996683608847124,
+      "segundos": 19.4
+    },
+    "log_sin_correccion": {
+      "wape": 0.17829740749844697,
+      "sesgo": -0.03361928132295722,
+      "costo_pred": 240263.99999999994,
+      "costo_cuantil": 179389.0,
+      "cobertura_vs_tau": 0.020996683608847124,
+      "segundos": 0.1
+    },
+    "poisson_costo_cuantil_por_dias_calibracion": {
+      "28": 179724.59999999998,
+      "56": 179224.1,
+      "91": 178654.5
+    },
+    "q_por_familia_poisson_56d": {
+      "abarrotes": 1.256,
+      "bebe": 1.373,
+      "bebidas": 1.27,
+      "carnes": 0.93,
+      "cuidado_personal": 1.369,
+      "frutas_verduras": 0.896,
+      "lacteos": 0.943,
+      "licores": 1.518,
+      "limpieza": 1.33,
+      "mascotas": 1.307,
+      "panaderia": 0.881,
+      "snacks": 1.165
+    },
+    "costo_por_familia_poisson": {
+      "abarrotes": {
+        "pred": 36982.0,
+        "cuantil": 23571.0
+      },
+      "bebe": {
+        "pred": 3950.0,
+        "cuantil": 2092.0
+      },
+      "bebidas": {
+        "pred": 29979.0,
+        "cuantil": 18824.0
+      },
+      "carnes": {
+        "pred": 25446.0,
+        "cuantil": 24714.0
+      },
+      "cuidado_personal": {
+        "pred": 8199.0,
+        "cuantil": 3646.0
+      },
+      "frutas_verduras": {
+        "pred": 32179.0,
+        "cuantil": 28862.0
+      },
+      "lacteos": {
+        "pred": 28055.0,
+        "cuantil": 27555.0
+      },
+      "licores": {
+        "pred": 8661.0,
+        "cuantil": 2899.0
+      },
+      "limpieza": {
+        "pred": 9176.0,
+        "cuantil": 4229.0
+      },
+      "mascotas": {
+        "pred": 2464.0,
+        "cuantil": 1858.0
+      },
+      "panaderia": {
+        "pred": 36652.0,
+        "cuantil": 29369.0
+      },
+      "snacks": {
+        "pred": 15260.0,
+        "cuantil": 11604.0
+      }
+    },
+    "poisson_costo_aditivo": 194919.8
+  },
+  "rolling": {
+    "ventanas": {
+      "2026-01-01": {
+        "vigente_congelado": 39343.0,
+        "retador": 39004.0,
+        "placebo_otra_semilla": 39527.0,
+        "baseline": 96315.0
+      },
+      "2026-01-15": {
+        "vigente_congelado": 42255.0,
+        "retador": 42124.0,
+        "placebo_otra_semilla": 42793.0,
+        "baseline": 67570.0
+      },
+      "2026-01-29": {
+        "vigente_congelado": 44129.0,
+        "retador": 43706.0,
+        "placebo_otra_semilla": 43658.0,
+        "baseline": 53891.0
+      },
+      "2026-02-12": {
+        "vigente_congelado": 43405.0,
+        "retador": 43062.0,
+        "placebo_otra_semilla": 43279.0,
+        "baseline": 52184.0
+      }
+    },
+    "totales": {
+      "vigente_congelado": 169132.0,
+      "retador": 167896.0,
+      "placebo_otra_semilla": 169256.0,
+      "baseline": 269959.0
+    },
+    "mejora_retador_vs_vigente": 0.0073,
+    "diferencia_placebo_vs_retador": 0.0081,
+    "dif_rel_por_ventana_retador_vs_vigente": [
+      0.0086,
+      0.0031,
+      0.0096,
+      0.0079
+    ],
+    "dif_rel_por_ventana_placebo": [
+      0.0134,
+      0.0159,
+      -0.0011,
+      0.005
+    ]
+  },
+  "segundos_totales": 171.2
+}
