@@ -274,7 +274,7 @@ observaciones de calidad" o en un rechazo con motivo.
 
 ---
 
-## Fase 6 — Reentrenamiento, hot-reload y resiliencia (endurecimiento)  ⏳ 7 de 8 (2026-11-11): falta el check requerido
+## Fase 6 — Reentrenamiento, hot-reload y resiliencia (endurecimiento)  ✅ cerrada (2026-11-11)
 **Objetivo:** el ciclo de mejora continua completo y a prueba de fallos.
 
 - [x] F6.1 DAG completo: extraer histórico + observaciones (unidas con `en_promocion` de la última
@@ -292,9 +292,9 @@ observaciones de calidad" o en un rechazo con motivo.
 - [x] F6.6 Hot-reload verificado ≤ 2 min (poll + swap atómico + humo; opcional aviso del DAG a la API).
 - [x] F6.7 Resiliencia MLflow verificada: predicciones siguen, degradado < 1 min, ok < 2 min; reinicio
       con MLflow caído arranca desde la caché.
-- [~] F6.8 Job de CI `dags` (`tests/test_dags.py`: sin import errors, `reentrenamiento`, sin schedule,
+- [x] F6.8 Job de CI `dags` (`tests/test_dags.py`: sin import errors, `reentrenamiento`, sin schedule,
       `max_active_runs=1`, orden de tareas); agregarlo a los checks requeridos.
-      _(job creado y probado con Airflow 3.3.2; falta sumarlo a la protección de `main` tras el PR)_
+      _(job `dags` requerido en `main` junto a `lint-y-pruebas` y `compose`)_
 
 ---
 
