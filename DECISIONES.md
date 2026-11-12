@@ -319,6 +319,56 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
 - **Justificación:** doble barrera (local y remota) contra filtraciones de datos y un historial
   lineal y revisable.
 
+### 5.4 Backend de MLflow en una base `mlflow` del Postgres del producto
+- **Decisión:** el tracking de MLflow usa la base `mlflow` dentro del Postgres del producto (la crea el
+  entrypoint si no existe); los artefactos van a un volumen servido por MLflow (`--serve-artifacts`,
+  `mlflow-artifacts:/`). Imagen propia `ghcr.io/mlflow/mlflow:v3.18.0` + `psycopg2-binary==2.9.11`.
+- **Alternativas:** SQLite en volumen; usar la instancia de Postgres de Airflow.
+- **Justificación:** robusto con varios workers, una instancia menos, y se respeta la separación
+  producto/Airflow que exige el enunciado.
+
+### 5.5 MLflow sin ejecución de jobs de GenAI
+- **Decisión:** `MLFLOW_SERVER_ENABLE_JOB_EXECUTION=false`.
+- **Alternativas:** dejar el valor por defecto.
+- **Justificación:** MLflow 3.18 lanza ~8 procesos de jobs (huey) que ocupaban ~2 GB; sin ellos el
+  pico del stack bajó de 3.65 GB a 1.9 GB. El servicio no usa funciones de GenAI.
+
+### 5.6 Autenticación de Airflow: FAB auth manager con JWT
+- **Decisión:** FAB auth manager; la API obtiene un token con `POST /auth/token` y llama a `/api/v2`.
+- **Alternativas:** SimpleAuthManager (genera contraseñas aleatorias en cada arranque).
+- **Justificación:** credenciales estables definidas en `.env`, igual que en el Lab 1.
+
+### 5.7 Imágenes y entornos
+- **Decisión:** una imagen única `novamercado/app` para la API y el `bootstrap`; Airflow con un venv
+  aislado `/opt/venv-ml` (`requirements-ml.txt` + `novamercado`) usado por `ExternalPythonOperator`.
+  `psycopg` pasa a `requirements-ml.txt` porque lo necesitan el bootstrap y el DAG.
+- **Alternativas:** una imagen por servicio; instalar las dependencias ML en el entorno de Airflow.
+- **Justificación:** menos imágenes que construir y mantener, y el entrenamiento no compite con las
+  constraints de Airflow.
+
+### 5.8 Entrada del modelo pyfunc
+- **Decisión:** el pyfunc recibe un DataFrame con columna `rol` (`solicitud` o `panel`); el panel se lee
+  en SQL con `fecha < D` y, si una fecha tiene observación y fila del histórico, gana la observación.
+- **Alternativas:** pasar el panel por otro canal (archivo, variable global); que el modelo consulte la BD.
+- **Justificación:** un pyfunc solo recibe un DataFrame; así el modelo sigue siendo puro y el filtro
+  temporal queda en SQL. Cierra la duda de la Fase 2 sobre observación vs histórico.
+
+### 5.9 Arranque y salud
+- **Decisión:** la API arranca sin esperar al bootstrap y responde 503 (`/health` con
+  `estado: "degradado"`) hasta que hay modelo; carga alias → caché en volumen → 503. Los chequeos de
+  salud corren en un hilo cada 10 s con timeouts de 3 s. El bootstrap espera a MLflow hasta 300 s y
+  usa `restart: on-failure:3`; si MLflow no responde, sale con error y nunca entrena.
+- **Alternativas:** `depends_on` con la API esperando al bootstrap; consultar las dependencias en cada
+  petición a `/health`.
+- **Justificación:** `/health` responde rápido y el camino de predicción nunca depende de MLflow.
+
+### 5.10 Criterio de promoción provisional (Fase 1)
+- **Decisión provisional:** promover si `costo_retador ≤ costo_vigente × (1 − CRITERIO_MEJORA_MINIMA)`
+  con mínimo 0, evaluando ambos en las mismas 28 fechas con predicción rodante `< D`.
+- **Justificación:** sirve para demostrar el ciclo completo con el baseline. **Se reemplaza** por el
+  criterio de §4 (mejora ≥ 0.5 %, mayoría de ventanas, mejor que el baseline) en la Fase 5, porque un
+  empate no debe tocar `champion`.
+
 ## 6. Reglas operativas
 
 ### 6.1 `POST /admin/reentrenar` con una ejecución en curso → 202 con el id de esa ejecución
