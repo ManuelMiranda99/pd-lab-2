@@ -1,0 +1,144 @@
+[
+  {
+    "nombre": "pred_ok_tienda3",
+    "descripcion": "Predicción válida sintética (tienda 3, marzo 2026)",
+    "endpoint": "prediccion",
+    "esperado": {"codigo": 200, "estado": "ok"},
+    "cuerpo": {
+      "tienda_id": 3,
+      "fecha": "2026-03-10",
+      "familias": [
+        {"familia_id": "abarrotes", "en_promocion": 2},
+        {"familia_id": "bebidas", "en_promocion": 0},
+        {"familia_id": "lacteos", "en_promocion": 1},
+        {"familia_id": "carnes", "en_promocion": 0},
+        {"familia_id": "panaderia", "en_promocion": 0},
+        {"familia_id": "frutas_verduras", "en_promocion": 5},
+        {"familia_id": "limpieza", "en_promocion": 0},
+        {"familia_id": "cuidado_personal", "en_promocion": 3},
+        {"familia_id": "licores", "en_promocion": 0},
+        {"familia_id": "snacks", "en_promocion": 0},
+        {"familia_id": "bebe", "en_promocion": 0},
+        {"familia_id": "mascotas", "en_promocion": 1}
+      ]
+    }
+  },
+  {
+    "nombre": "pred_mezcla_reparable",
+    "descripcion": "Varias reparaciones: id con prefijo, fecha AAAAMMDD, camelCase, familias por nombre",
+    "endpoint": "prediccion",
+    "esperado": {"codigo": 200, "estado": "corregido"},
+    "cuerpo": {
+      "tiendaId": "tienda-07",
+      "Fecha": "20260415",
+      "familias": [
+        {"familiaId": "ABARROTES", "enPromocion": "4"},
+        {"familia_id": "Bebidas", "en_promocion": 1.0},
+        {"familia_id": "Lácteos", "en_promocion": 0},
+        {"familia_id": "carnes", "en_promocion": 0},
+        {"familia_id": "Panadería", "en_promocion": 0},
+        {"familia_id": "frutas & verduras", "en_promocion": 0},
+        {"familia_id": "limpieza", "en_promocion": 0},
+        {"familia_id": "cuidado-personal", "en_promocion": 0},
+        {"familia_id": "licores", "en_promocion": 0},
+        {"familia_id": "Snacks y dulces", "en_promocion": 0},
+        {"familia_id": "BEBÉ", "en_promocion": 0},
+        {"familia_id": " mascotas ", "en_promocion": 0}
+      ],
+      "origen": "pos-v2"
+    }
+  },
+  {
+    "nombre": "pred_supuestos",
+    "descripcion": "Fecha ambigua, promoción decimal y nula, familia aproximada, ítem basura, familia desconocida",
+    "endpoint": "prediccion",
+    "esperado": {"codigo": 200, "estado": "advertencia"},
+    "cuerpo": {
+      "tienda_id": 2,
+      "fecha": "03/04/2026",
+      "familias": [
+        {"familia_id": "abarrotes", "en_promocion": 2.5},
+        {"familia_id": "bebidas", "en_promocion": null},
+        {"familia_id": "lacteo", "en_promocion": 0},
+        "carnes",
+        {"familia_id": "juguetes", "en_promocion": 3}
+      ]
+    }
+  },
+  {
+    "nombre": "pred_tienda_inexistente",
+    "descripcion": "Tienda fuera del catálogo",
+    "endpoint": "prediccion",
+    "esperado": {"codigo": 422, "politica": "TIENDA_INEXISTENTE"},
+    "cuerpo": {
+      "tienda_id": 42,
+      "fecha": "2026-03-10",
+      "familias": [{"familia_id": "abarrotes", "en_promocion": 0}]
+    }
+  },
+  {
+    "nombre": "pred_tienda_antes_apertura",
+    "descripcion": "La tienda sintética 10 abre el 2025-06-01",
+    "endpoint": "prediccion",
+    "esperado": {"codigo": 422, "politica": "FECHA_ANTES_APERTURA"},
+    "cuerpo": {
+      "tienda_id": 10,
+      "fecha": "2025-05-31",
+      "familias": [{"familia_id": "abarrotes", "en_promocion": 0}]
+    }
+  },
+  {
+    "nombre": "obs_ok_tienda3",
+    "descripcion": "Observación válida sintética",
+    "endpoint": "observaciones",
+    "esperado": {"codigo": 200, "estado": "ok", "guardables": 12},
+    "cuerpo": {
+      "tienda_id": 3,
+      "fecha": "2026-03-10",
+      "ventas": [
+        {"familia_id": "abarrotes", "ventas": 701},
+        {"familia_id": "bebidas", "ventas": 950},
+        {"familia_id": "lacteos", "ventas": 233},
+        {"familia_id": "carnes", "ventas": 140},
+        {"familia_id": "panaderia", "ventas": 171},
+        {"familia_id": "frutas_verduras", "ventas": 388},
+        {"familia_id": "limpieza", "ventas": 160},
+        {"familia_id": "cuidado_personal", "ventas": 97},
+        {"familia_id": "licores", "ventas": 61},
+        {"familia_id": "snacks", "ventas": 302},
+        {"familia_id": "bebe", "ventas": 44},
+        {"familia_id": "mascotas", "ventas": 39}
+      ]
+    }
+  },
+  {
+    "nombre": "obs_mixta",
+    "descripcion": "Miles, coma decimal, negativo, decimal real, duplicado en conflicto y faltantes",
+    "endpoint": "observaciones",
+    "esperado": {"codigo": 200, "estado": "advertencia", "guardables": 3},
+    "cuerpo": {
+      "tienda": "T3",
+      "fecha": "2026-03-10T06:00:00",
+      "ventas": [
+        {"familia_id": "abarrotes", "ventas": "2,105"},
+        {"familia_id": "bebidas", "ventas": "77,0"},
+        {"familia_id": "lacteos", "ventas": -12},
+        {"familia_id": "carnes", "ventas": "33,5"},
+        {"familia_id": "panaderia", "ventas": 90},
+        {"familia_id": "panaderia", "ventas": 95},
+        {"familia_id": "limpieza", "ventas": 15}
+      ]
+    }
+  },
+  {
+    "nombre": "obs_sin_familias_validas",
+    "descripcion": "Ninguna familia reconocible",
+    "endpoint": "observaciones",
+    "esperado": {"codigo": 422, "politica": "SIN_FAMILIAS"},
+    "cuerpo": {
+      "tienda_id": 3,
+      "fecha": "2026-03-10",
+      "ventas": [{"familia_id": "juguetes", "ventas": 5}, {"familia_id": null, "ventas": 2}]
+    }
+  }
+]
