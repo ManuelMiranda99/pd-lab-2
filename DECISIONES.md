@@ -3,6 +3,15 @@
 Cada decisión: **decisión · alternativas consideradas · justificación**. Los cuatro temas que exige
 el laboratorio van primero; luego las decisiones de stack y de operación.
 
+**Resumen**
+
+| Tema | Decisión | Detalle |
+|---|---|---|
+| Datos defectuosos | Reglas generales por tipo de problema (no por ejemplo): reparar solo si la lectura es única y sin pérdida; advertir si hubo que suponer algo; rechazar (422) solo si la identidad tienda/fecha es irreparable. Una tabla declarativa en el código es la única fuente y un test verifica que coincide con §1.4 | §1 |
+| Información del modelo | Calendario (día de la semana, feriados por ciudad, días de pago, días especiales), tienda, familia, promoción del día y lags/medias de ventas **anteriores a `D`** filtradas en SQL; HistGradientBoosting con pérdida Poisson | §2 |
+| Cantidad sugerida | `ceil(venta_esperada × q_f)`: `q_f` es el cuantil τ = c_faltante / (c_faltante + c_sobrante) del ratio real/predicho de cada familia (newsvendor); −24 % de costo frente a sugerir la predicción | §3 |
+| Criterio de reemplazo | Retador vs vigente en las mismas ventanas recientes (origen móvil): promueve si mejora el costo ≥ 0.5 %, gana la mitad de las ventanas y supera al baseline; si no, el alias `champion` no se mueve | §4 |
+
 ## 1. Política por tipo de problema en los datos
 
 ### 1.1 Principio general
@@ -353,6 +362,11 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
   placebo de §4.2 (±0.8 %), y las vidas medias cortas empeoran en los tres escenarios: tiran
   información de estacionalidad (diciembre, Semana Santa) que solo está en el año anterior. Los
   lags ya llevan el nivel nuevo, así que el peso no agrega nada.
+- **Limitación conocida (simulación, `evidencia/simulacion/`):** tras un choque de nivel, el
+  retador necesita 1–2 semanas de observaciones para cumplir §4.2 (≥ 0.5 % y la mitad de las
+  ventanas). Mientras tanto el vigente ya sigue el nivel nuevo por sus lags, así que el costo en ese
+  intervalo sigue por debajo del baseline (−22.8 % con choque −20 %, −32.5 % con +20 %). Relajar el
+  umbral para promover antes reabriría la puerta al ruido del placebo; se conserva.
 
 ## 5. Stack y operación
 
@@ -370,11 +384,17 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
   un remoto agrega credenciales y puntos de falla sin beneficio para la evaluación.
 
 ### 5.3 CI y flujo por PR
-- **Decisión:** `main` protegida; todo entra por PR con squash y el check `lint-y-pruebas` en verde.
-  Los ganchos locales (`.githooks/`) bloquean datos, credenciales y push a `main`.
-- **Alternativas:** commits directos a `main`; solo ganchos locales sin protección en GitHub.
-- **Justificación:** doble barrera (local y remota) contra filtraciones de datos y un historial
-  lineal y revisable.
+- **Decisión:** `main` protegida; todo entra por PR con squash y la CI en verde. GitHub Actions
+  corre cuatro jobs: `lint-y-pruebas` (ruff, pytest con Postgres y una verificación de que no hay
+  datos ni credenciales versionados), `dags` (el DAG con Airflow 3.3.2 y sus constraints),
+  `compose` (configuración válida con `.env.example` sin editar, servicio `mlflow`, sin `latest`,
+  hadolint y build) y `smoke` (stack completo con datos sintéticos; en `main`, en los tags
+  `entrega-*` y en PRs con la etiqueta `smoke`). Los ganchos locales (`.githooks/`) bloquean
+  datos, credenciales y push a `main`.
+- **Alternativas:** commits directos a `main`; solo ganchos locales sin protección en GitHub; smoke
+  en cada PR (≈ 6 min más por PR).
+- **Justificación:** doble barrera (local y remota) contra filtraciones de datos, un historial
+  lineal y revisable, y el smoke corre sobre lo que se entrega (el tag) sin encarecer cada PR.
 
 ### 5.4 Backend de MLflow en una base `mlflow` del Postgres del producto
 - **Decisión:** el tracking de MLflow usa la base `mlflow` dentro del Postgres del producto (la crea el
@@ -425,6 +445,7 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
 - **Justificación:** sirve para demostrar el ciclo completo con el baseline. **Se reemplaza** por el
   criterio de §4 (mejora ≥ 0.5 %, mayoría de ventanas, mejor que el baseline) en la Fase 5, porque un
   empate no debe tocar `champion`.
+
 ### 5.11 Persistencia de solicitudes y orden de los errores
 - **Decisión:** toda solicitud queda en `solicitudes` (cuerpo crudo hasta 100 000 caracteres, forma
   normalizada, `calidad_estado`, claves ignoradas y versión del modelo), **también las rechazadas**
@@ -459,7 +480,21 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
 - **Justificación:** con la misma imagen y el mismo código se prueba exactamente el camino del
   evaluador; la variable solo afecta la primera carga de un volumen nuevo y no deja ninguna puerta en
   la API. Separar el proyecto evita mezclar observaciones de prueba con las del stack entregado
-  (lo que pasó en la Fase 6).
+  (lo que pasó en la Fase 6). El mismo esquema genera la evidencia de operación
+  (`scripts/evidencia.py` → `evidencia/evidencia.md`).
+
+### 5.13 Desarrollo asistido por IA, visible en el repositorio
+- **Decisión:** el trabajo se hizo con Claude Code y queda versionado: `CLAUDE.md` (reglas no
+  negociables del proyecto para el agente), `PLAN.md` (fases con matriz de cumplimiento contra el
+  enunciado), `BITACORA.md` (una entrada por sesión, con lo logrado, lo verificado y lo pendiente)
+  y `.claude/skills/` (`/iniciar-fase` y `/cerrar-fase`). Los commits llevan la firma de Claude
+  cuando intervino. Cada afirmación de rendimiento se respalda con un script reproducible y su
+  salida en `evidencia/`, y toda decisión pasa por este archivo.
+- **Alternativas:** usar la IA sin dejar rastro; solo un `CLAUDE.md`.
+- **Justificación:** el enunciado exige poder comprender y justificar todo el código; el plan, la
+  bitácora y las pruebas hacen verificable qué se decidió, por qué y cómo se comprobó, y las reglas
+  de `CLAUDE.md` (contrato exacto, sin reloj del sistema, sin fuga temporal) se aplicaron en cada
+  sesión.
 
 ## 6. Reglas operativas
 

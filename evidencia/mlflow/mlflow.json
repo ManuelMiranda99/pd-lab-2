@@ -1,0 +1,210 @@
+{
+  "experimentos": [
+    {
+      "experiment_id": "1",
+      "name": "novamercado",
+      "artifact_location": "mlflow-artifacts:/1",
+      "lifecycle_stage": "active",
+      "last_update_time": 1794493292221,
+      "creation_time": 1794493292221,
+      "workspace": "default"
+    },
+    {
+      "experiment_id": "0",
+      "name": "Default",
+      "artifact_location": "mlflow-artifacts:/0",
+      "lifecycle_stage": "active",
+      "last_update_time": 1794493241772,
+      "creation_time": 1794493241772,
+      "workspace": "default"
+    }
+  ],
+  "modelo_registrado": {
+    "nombre": "novamercado",
+    "aliases": [
+      {
+        "alias": "champion",
+        "version": "3"
+      }
+    ]
+  },
+  "versiones": [
+    {
+      "version": "1",
+      "run_id": "eae122132fbf472280783e57ce92bfc1",
+      "estado": "READY",
+      "aliases": [],
+      "tags": {
+        "promovido": "True"
+      }
+    },
+    {
+      "version": "2",
+      "run_id": "2bc0f7f899834cf2a4ce707a121c3975",
+      "estado": "READY",
+      "aliases": [],
+      "tags": {
+        "promovido": "False"
+      }
+    },
+    {
+      "version": "3",
+      "run_id": "501c4c30da674727a9e8b064d8c7d66d",
+      "estado": "READY",
+      "aliases": [
+        "champion"
+      ],
+      "tags": {
+        "promovido": "True"
+      }
+    }
+  ],
+  "runs": [
+    {
+      "run_id": "31c321f41c8248e395e1653703c0e416",
+      "nombre": "baseline-bootstrap",
+      "estado": "FINISHED",
+      "rol": "referencia",
+      "decision": null,
+      "metricas": {
+        "costo_validacion": 80166.7,
+        "wape": 0.21512887307183126,
+        "mae": 45.912599206349206,
+        "rmse": 85.8991441821754,
+        "sesgo": -5.78561507936508
+      },
+      "linaje": {
+        "id_reentreno": "bootstrap",
+        "modelo": "baseline_dia_semana",
+        "fecha_min": "2024-03-01",
+        "fecha_max": "2026-02-28",
+        "filas": "83052",
+        "observaciones": "0",
+        "commit": "desconocido",
+        "version_vigente": "",
+        "datos_sha256": "5cc214b3fd8e7cfb037685c66f5a39045fa7cac2ec3f7ba335f86d5d3be6897d"
+      }
+    },
+    {
+      "run_id": "eae122132fbf472280783e57ce92bfc1",
+      "nombre": "hgb_poisson-bootstrap",
+      "estado": "FINISHED",
+      "rol": "retador",
+      "decision": "Sin modelo vigente; costo en validación 64 841 vs 80 167 del baseline (−19.1 %): promovido",
+      "metricas": {
+        "costo_validacion": 64841.0,
+        "costo_baseline": 80166.7,
+        "wape": 0.1748689514629539,
+        "mae": 37.32036507936508,
+        "rmse": 67.83362451967453,
+        "sesgo": -2.6032619047619048,
+        "promovido": 1.0
+      },
+      "linaje": {
+        "id_reentreno": "bootstrap",
+        "modelo": "hgb_poisson",
+        "fecha_min": "2024-03-01",
+        "fecha_max": "2026-02-28",
+        "filas": "83052",
+        "observaciones": "0",
+        "commit": "desconocido",
+        "version_vigente": "",
+        "datos_sha256": "5cc214b3fd8e7cfb037685c66f5a39045fa7cac2ec3f7ba335f86d5d3be6897d"
+      }
+    },
+    {
+      "run_id": "e462d7ee3383471bbdee35eb962c4c2d",
+      "nombre": "baseline-7387a3fc05404976b06fd05aee37bb2c",
+      "estado": "FINISHED",
+      "rol": "referencia",
+      "decision": null,
+      "metricas": {},
+      "linaje": {
+        "id_reentreno": "7387a3fc05404976b06fd05aee37bb2c",
+        "modelo": "baseline_dia_semana",
+        "fecha_min": "2024-03-01",
+        "fecha_max": "2026-02-28",
+        "filas": "83052",
+        "observaciones": "0",
+        "commit": "desconocido",
+        "version_vigente": "1",
+        "datos_sha256": "5cc214b3fd8e7cfb037685c66f5a39045fa7cac2ec3f7ba335f86d5d3be6897d"
+      }
+    },
+    {
+      "run_id": "2bc0f7f899834cf2a4ce707a121c3975",
+      "nombre": "hgb_poisson-7387a3fc05404976b06fd05aee37bb2c",
+      "estado": "FINISHED",
+      "rol": "retador",
+      "decision": "Solo 0 días evaluables después del corte del vigente (mínimo 7): se conserva el vigente",
+      "metricas": {
+        "promovido": 0.0
+      },
+      "linaje": {
+        "id_reentreno": "7387a3fc05404976b06fd05aee37bb2c",
+        "modelo": "hgb_poisson",
+        "fecha_min": "2024-03-01",
+        "fecha_max": "2026-02-28",
+        "filas": "83052",
+        "observaciones": "0",
+        "commit": "desconocido",
+        "version_vigente": "1",
+        "datos_sha256": "5cc214b3fd8e7cfb037685c66f5a39045fa7cac2ec3f7ba335f86d5d3be6897d"
+      }
+    },
+    {
+      "run_id": "85bcd21ec3734c89bde6ed6d6480611d",
+      "nombre": "baseline-518816a0ce144b1ea91fa2c278ee6a81",
+      "estado": "FINISHED",
+      "rol": "referencia",
+      "decision": null,
+      "metricas": {
+        "costo_validacion": 66072.1,
+        "wape": 0.20501124813250776,
+        "mae": 56.523065476190474,
+        "rmse": 99.88256404249132,
+        "sesgo": -54.19598214285714
+      },
+      "linaje": {
+        "id_reentreno": "518816a0ce144b1ea91fa2c278ee6a81",
+        "modelo": "baseline_dia_semana",
+        "fecha_min": "2024-03-01",
+        "fecha_max": "2026-03-14",
+        "filas": "84732",
+        "observaciones": "1680",
+        "commit": "desconocido",
+        "version_vigente": "1",
+        "datos_sha256": "5cc214b3fd8e7cfb037685c66f5a39045fa7cac2ec3f7ba335f86d5d3be6897d"
+      }
+    },
+    {
+      "run_id": "501c4c30da674727a9e8b064d8c7d66d",
+      "nombre": "hgb_poisson-518816a0ce144b1ea91fa2c278ee6a81",
+      "estado": "FINISHED",
+      "rol": "retador",
+      "decision": "Costo en validación 46 296 vs 47 167 del vigente (−1.8 %, gana 1/2 ventanas): promovido",
+      "metricas": {
+        "costo_validacion": 46295.5,
+        "costo_baseline": 66072.1,
+        "costo_vigente": 47166.7,
+        "ventanas_ganadas": 1.0,
+        "wape": 0.18748180004663334,
+        "mae": 51.690071428571436,
+        "rmse": 76.62834599701402,
+        "sesgo": -51.690071428571436,
+        "promovido": 1.0
+      },
+      "linaje": {
+        "id_reentreno": "518816a0ce144b1ea91fa2c278ee6a81",
+        "modelo": "hgb_poisson",
+        "fecha_min": "2024-03-01",
+        "fecha_max": "2026-03-14",
+        "filas": "84732",
+        "observaciones": "1680",
+        "commit": "desconocido",
+        "version_vigente": "1",
+        "datos_sha256": "5cc214b3fd8e7cfb037685c66f5a39045fa7cac2ec3f7ba335f86d5d3be6897d"
+      }
+    }
+  ]
+}

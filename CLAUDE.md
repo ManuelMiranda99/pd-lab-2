@@ -9,6 +9,14 @@ Stack: Python 3.11 · FastAPI (puerto 8000) · Pydantic · PostgreSQL propio (se
 MLflow (servicio `mlflow`, Model Registry con alias `champion`) · Airflow 3.3.2 (LocalExecutor) ·
 Docker Compose · pytest · ruff · GitHub Actions.
 
+## Estado
+
+Producto completo (fases 0–8): contrato, limpieza, persistencia, modelo HGB + cuantil por familia,
+reentrenamiento por DAG con criterio de reemplazo, hot-reload, resiliencia, smoke/simulador en CI y
+evidencia en `evidencia/`. La versión entregada se identifica con el tag `entrega-lab2` sobre `main`.
+Cualquier cambio posterior debe mantener verde la CI (incluido el job `smoke`) y no romper las
+reglas de abajo; si cambia una política o el criterio, se actualiza `DECISIONES.md` en el mismo PR.
+
 ## Cómo se trabaja (flujo con IA, visible en el repo)
 
 - `PLAN.md`: plan por fases (0–8) con IDs de tarea `F#.#` y matriz de cumplimiento contra el PDF.
@@ -42,12 +50,13 @@ src/novamercado/
   modelo/         baseline, ML, cuantiles, métricas, pyfunc, criterio de promoción
   db/             esquema, repositorios, migraciones
   servicio/       carga/caché/hot-reload del modelo, health, clientes MLflow/Airflow
+  bootstrap.py    carga inicial de datos y primer modelo (idempotente por huella)
   sintetico.py    datos sintéticos para CI y smoke
 dags/             DAG `reentrenamiento` (solo orquesta)
 docker/           Dockerfiles y entrypoints
 tests/            pytest + fixtures propias (sin datos publicados)
-scripts/          simulador, smoke, EDA
-evidencia/        capturas y respuestas de ejemplo
+scripts/          EDA, backtest, smoke, simulador y generador de evidencia (proyecto -p aparte)
+evidencia/        EDA, modelo, smoke, simulación y evidencia de operación (evidencia.md)
 ```
 
 ## Reglas no negociables

@@ -1,0 +1,93 @@
+{
+  "dag": {
+    "dag_id": "reentrenamiento",
+    "is_paused": false,
+    "description": "Reentrena el modelo y lo promueve con el alias si supera al vigente",
+    "timetable_summary": null,
+    "tags": [
+      {
+        "name": "novamercado",
+        "dag_id": "reentrenamiento",
+        "dag_display_name": "reentrenamiento"
+      }
+    ]
+  },
+  "ejecuciones": [
+    {
+      "dag_run_id": "7387a3fc05404976b06fd05aee37bb2c",
+      "estado": "success",
+      "inicio": "2026-11-12T14:21:39.446312Z",
+      "fin": "2026-11-12T14:22:03.685460Z",
+      "tareas": [
+        {
+          "tarea": "verificar",
+          "estado": "success",
+          "duracion_s": 2.779233
+        },
+        {
+          "tarea": "entrenar",
+          "estado": "success",
+          "duracion_s": 16.767063
+        },
+        {
+          "tarea": "promover",
+          "estado": "success",
+          "duracion_s": 0.190764
+        },
+        {
+          "tarea": "confirmar",
+          "estado": "success",
+          "duracion_s": 0.928034
+        },
+        {
+          "tarea": "fin",
+          "estado": "success",
+          "duracion_s": 0.0
+        },
+        {
+          "tarea": "cerrar",
+          "estado": "success",
+          "duracion_s": 0.178566
+        }
+      ]
+    },
+    {
+      "dag_run_id": "518816a0ce144b1ea91fa2c278ee6a81",
+      "estado": "success",
+      "inicio": "2026-11-12T14:22:26.628427Z",
+      "fin": "2026-11-12T14:23:05.928411Z",
+      "tareas": [
+        {
+          "tarea": "verificar",
+          "estado": "success",
+          "duracion_s": 0.973742
+        },
+        {
+          "tarea": "entrenar",
+          "estado": "success",
+          "duracion_s": 32.046037
+        },
+        {
+          "tarea": "promover",
+          "estado": "success",
+          "duracion_s": 1.091406
+        },
+        {
+          "tarea": "confirmar",
+          "estado": "success",
+          "duracion_s": 0.918385
+        },
+        {
+          "tarea": "fin",
+          "estado": "success",
+          "duracion_s": 0.0
+        },
+        {
+          "tarea": "cerrar",
+          "estado": "success",
+          "duracion_s": 0.182544
+        }
+      ]
+    }
+  ]
+}
