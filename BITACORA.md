@@ -155,5 +155,56 @@ Trabajo delegado en paralelo a tres agentes, cada uno en su worktree y rama (`fe
 
 ## Sesión 2026-11-11 — Fase 4 (inicio)
 **Fase:** 4 — API completa y persistencia
+**Estado al cerrar:** Fase 4 cerrada ✅ (8 de 8) · Fase 1 cerrada al abrir (F1.12 verificada: `compose` en verde y check requerido)
+
+Toda la fase en una pasada, en la rama `feat/api-persistencia` → PR #7 (squash, CI verde).
+
+### Logrado
+- F4.1 Migración 2 en `src/novamercado/db/esquema.py`: `solicitudes` (aceptadas y rechazadas con
+  `detail` y código), `predicciones` (sin UNIQUE, con `promocion_explicita` para §6.3),
+  `correcciones`, `observaciones_historial`; `observaciones.solicitud_id` y CHECK de ventas ≥ 0.
+  Repositorios en `db/repos.py` (texto sin NUL, cuerpo crudo truncado a 100 000 caracteres).
+- F4.2 `servicio/solicitudes.py` orquesta lectura → catálogo → limpieza → predicción → guardado en
+  una transacción. `servicio/prediccion.py` usa `contrato.sanear_prediccion` y convierte un fallo
+  del modelo en 503.
+- F4.3 Upsert `ON CONFLICT … WHERE ventas IS DISTINCT FROM … RETURNING`; reenvío idéntico → 0.
+- F4.4 Manejadores en `api/main.py`: validación → 422 con texto, 400 → 422, `psycopg.Error` → 503.
+- F4.5/F4.6 `/modelo` y `/health` responden con los modelos de `novamercado.contrato`; se borró
+  `api/esquemas_provisionales.py`. `/admin` también usa el contrato.
+- F4.7 Endpoints `def`; solo la dependencia que lee el cuerpo es asíncrona.
+- F4.8 `tests/test_api_persistencia.py` (32 casos) + ajustes en las pruebas del esqueleto
+  (catálogo sintético inyectable).
+- Catálogo de la limpieza leído de la BD con caché (`servicio/catalogo.py`).
+
+### Verificación
+- pytest con Postgres 17.6 (`TEST_DATABASE_URL`): **698 pasan, 0 omitidas**; ruff limpio. CI de #7 en verde.
+- Docker: migración 2 aplicada sobre el volumen existente. Predicción ~75 ms, observación ~14 ms.
+  E01–E10 con las políticas documentadas; cuerpo vacío, lista, JSON roto y `null` → 422.
+  `stop mlflow` → `degradado` en ~10 s, predicción 200 en 59 ms; vuelve a `ok` ~15 s tras `start`.
+
+### Decisiones tomadas
+- Persistencia de solicitudes (también rechazadas), catálogo desde la BD y orden de los errores
+  (422 de lectura antes que 503 de catálogo) → DECISIONES.md §5.11.
+
+### Pendientes / bloqueos
+- Reentreno con uno en curso (§6.1) y fila `en_curso` huérfana → F6.3/F6.4.
+- Criterio de promoción provisional (empate promueve) → F5.8.
+- Las claves desconocidas se guardan en `solicitudes.claves_ignoradas`, no en `correcciones`.
+- El catálogo queda en caché de por vida del proceso: si el bootstrap carga datos distintos, hay
+  que reiniciar la API (hoy los datos no cambian en caliente).
+
+### Próxima sesión
+- Empezar por: **Fase 5** — F5.1 `src/novamercado/features/` con la función única de variables de
+  DECISIONES §2.2 (lags a la fecha del último dato, `dias_desde_ultimo_dato`, calendario, feriados
+  con cruce exacto de ciudad), partiendo de `features/panel.py` y `features/baseline.py`.
+- Luego: F5.2 validación rolling origin → F5.3 HistGradientBoosting (pérdida Poisson) → F5.4/F5.5
+  métricas, costo y cuantil τ por familia.
+- Tener en cuenta: el pyfunc recibe `rol` (§5.8) y `code_paths` recarga `novamercado`; usar
+  `predicciones.promocion_explicita` para el `en_promocion` de entrenamiento (§6.3).
+
+---
+
+## Sesión 2026-11-11 — Fase 5 (inicio)
+**Fase:** 5 — Modelo ML, cantidad sugerida y criterio de reemplazo
 **Estado al cerrar:** _(sesión abierta)_
-**Plan del día:** Fase 4 completa (F4.1–F4.8), en una pasada (F1.12 verificada al abrir: `compose` en verde y requerido)
+**Plan del día:** F5.1, F5.2, F5.3, F5.4, F5.5

@@ -2,8 +2,8 @@
 
 Entrada del pyfunc: un DataFrame con la columna `rol`:
 - `rol == "solicitud"`: filas a predecir (`tienda_id, fecha, familia_id, en_promocion`).
-- `rol == "panel"`: ventas anteriores (`tienda_id, fecha, familia_id, ventas`), ya filtradas
-  `fecha < D` en SQL.
+- `rol == "panel"`: ventas anteriores (`tienda_id, fecha, familia_id, ventas, en_promocion`), ya
+  filtradas `fecha < D` en SQL; `en_promocion` puede ser NaN (promoción desconocida, §6.3).
 Salida: `tienda_id, fecha, familia_id, venta_esperada, cantidad_sugerida`.
 """
 
@@ -24,6 +24,7 @@ REQUISITOS_PIP = [
     "mlflow-skinny==3.18.0",
     "numpy==2.4.6",
     "pandas==3.1.1",
+    "scikit-learn==1.9.1",
 ]
 
 
@@ -41,6 +42,7 @@ class ModeloNovaMercado(mlflow.pyfunc.PythonModel):
             tienda_id=panel["tienda_id"].astype("int64"),
             fecha=pd.to_datetime(panel["fecha"]),
             ventas=panel["ventas"].astype(float),
+            en_promocion=pd.to_numeric(panel["en_promocion"], errors="coerce").astype(float),
         )
         return self.modelo.predecir(solicitud, panel)
 
@@ -50,13 +52,15 @@ def armar_entrada(solicitud: pd.DataFrame, panel: pd.DataFrame) -> pd.DataFrame:
     s = solicitud.loc[:, ["tienda_id", "fecha", "familia_id", "en_promocion"]].assign(
         rol="solicitud", ventas=float("nan")
     )
-    p = panel.loc[:, ["tienda_id", "fecha", "familia_id", "ventas"]].assign(
-        rol="panel", en_promocion=0
+    if "en_promocion" not in panel:
+        panel = panel.assign(en_promocion=float("nan"))
+    p = panel.loc[:, ["tienda_id", "fecha", "familia_id", "ventas", "en_promocion"]].assign(
+        rol="panel"
     )
     df = pd.concat([s, p], ignore_index=True)
     df["fecha"] = pd.to_datetime(df["fecha"])
     df["tienda_id"] = df["tienda_id"].astype("int64")
-    df["en_promocion"] = df["en_promocion"].astype("int64")
+    df["en_promocion"] = pd.to_numeric(df["en_promocion"], errors="coerce").astype(float)
     df["ventas"] = df["ventas"].astype(float)
     return df[["rol", "tienda_id", "fecha", "familia_id", "en_promocion", "ventas"]]
 

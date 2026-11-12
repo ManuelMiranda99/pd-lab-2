@@ -43,7 +43,7 @@ class Config:
     airflow_usuario: str = "airflow"
     airflow_password: str = "airflow"
     dag_id: str = "reentrenamiento"
-    mejora_minima: float = 0.0
+    mejora_minima: float = 0.005  # DECISIONES §4.2
     espera_mlflow_segundos: int = 180
 
     @classmethod

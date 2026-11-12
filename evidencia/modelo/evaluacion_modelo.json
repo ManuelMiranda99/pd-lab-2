@@ -1,0 +1,126 @@
+{
+  "validacion": {
+    "dias": 59,
+    "filas": 7080,
+    "hgb": {
+      "costo_con_cuantil": 178418,
+      "costo_sugiriendo_prediccion": 234439,
+      "mae": 35.926,
+      "rmse": 66.6394,
+      "wape": 0.1768,
+      "sesgo": -3.7465,
+      "sesgo_relativo": -0.0184
+    },
+    "baseline": {
+      "costo_con_cuantil": 310576,
+      "costo_sugiriendo_prediccion": 351652,
+      "mae": 59.7163,
+      "rmse": 111.1184,
+      "wape": 0.2939,
+      "sesgo": 17.6467,
+      "sesgo_relativo": 0.0868
+    },
+    "q_por_familia": {
+      "abarrotes": 1.25,
+      "bebe": 1.392,
+      "bebidas": 1.274,
+      "carnes": 0.943,
+      "cuidado_personal": 1.352,
+      "frutas_verduras": 0.9,
+      "lacteos": 0.958,
+      "licores": 1.51,
+      "limpieza": 1.331,
+      "mascotas": 1.309,
+      "panaderia": 0.871,
+      "snacks": 1.156
+    },
+    "segundos_receta_y_modelo": 18.8,
+    "mejora_hgb_vs_baseline": -0.4255,
+    "efecto_cuantil_hgb": -0.239
+  },
+  "sin_lags": {
+    "hgb": {
+      "costo_con_cuantil": 203038,
+      "costo_sugiriendo_prediccion": 283835,
+      "mae": 40.6181,
+      "rmse": 77.3799,
+      "wape": 0.1999,
+      "sesgo": -16.9839,
+      "sesgo_relativo": -0.0836
+    },
+    "baseline": {
+      "costo_con_cuantil": 433578,
+      "costo_sugiriendo_prediccion": 403567,
+      "mae": 77.1074,
+      "rmse": 130.2562,
+      "wape": 0.3794,
+      "sesgo": 62.2432,
+      "sesgo_relativo": 0.3063
+    },
+    "hgb_vs_baseline": -0.5317
+  },
+  "arranque_en_frio": {
+    "segundos": 50.1,
+    "ventanas": [
+      {
+        "inicio": "2026-02-08",
+        "fin": "2026-02-14",
+        "dias": 7,
+        "costo_retador": 21090.2,
+        "costo_baseline": 25405.6,
+        "filas": 840
+      },
+      {
+        "inicio": "2026-02-15",
+        "fin": "2026-02-21",
+        "dias": 7,
+        "costo_retador": 21960.600000000002,
+        "costo_baseline": 27672.600000000002,
+        "filas": 840
+      },
+      {
+        "inicio": "2026-02-22",
+        "fin": "2026-02-28",
+        "dias": 7,
+        "costo_retador": 21790.199999999997,
+        "costo_baseline": 27088.5,
+        "filas": 840
+      }
+    ],
+    "motivo": "Sin modelo vigente; costo en validación 64 841 vs 80 167 del baseline (−19.1 %): promovido"
+  },
+  "retador_vs_vigente": {
+    "corte_vigente": "2026-02-08",
+    "segundos": 50.7,
+    "ventanas": [
+      {
+        "inicio": "2026-02-08",
+        "fin": "2026-02-14",
+        "dias": 7,
+        "costo_retador": 21090.2,
+        "costo_baseline": 25405.6,
+        "costo_vigente": 21033.9,
+        "filas": 840
+      },
+      {
+        "inicio": "2026-02-15",
+        "fin": "2026-02-21",
+        "dias": 7,
+        "costo_retador": 21960.600000000002,
+        "costo_baseline": 27672.600000000002,
+        "costo_vigente": 22196.8,
+        "filas": 840
+      },
+      {
+        "inicio": "2026-02-22",
+        "fin": "2026-02-28",
+        "dias": 7,
+        "costo_retador": 21790.199999999997,
+        "costo_baseline": 27088.5,
+        "costo_vigente": 22323.1,
+        "filas": 840
+      }
+    ],
+    "motivo": "Costo en validación 64 841 vs 65 554 del vigente (−1.1 %, gana 2/3 ventanas): promovido"
+  }
+}

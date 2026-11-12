@@ -136,6 +136,10 @@ semana en las ±4 semanas vecinas, sumando las tiendas 1–9.
   disponible** (el último valor anterior a `D`, el del mismo día de la semana más reciente, etc.)
   y se agrega `dias_desde_ultimo_dato`. Al entrenar se enmascaran lags al azar para que el
   modelo aprenda a predecir con huecos.
+  Implementado en `features/variables.py`: el 30 % de las filas toma sus variables de una copia
+  del panel con huecos de 1–14 días por tienda (20 % de los días) y el 5 % no tiene ninguna
+  variable de nivel. Todo lo que mira hacia atrás se acota a 112 días, los mismos que lee el
+  panel al predecir, de modo que entrenar y servir dan los mismos valores (lo verifica una prueba).
 - **Alternativas:** lags fijos (`D−1`, `D−7`) que quedan vacíos si falta un día; un modelo sin
   lags, solo con calendario; filtrar en pandas después de leer todo.
 - **Justificación:** el enunciado dice que al predecir `D` solo se conocen días anteriores, y el
@@ -297,6 +301,35 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
 - **Tiempo:** cada ajuste de HGB tarda ~10 s con ~75 000 filas. La evaluación pide como máximo 3
   ventanas × 1 ajuste, más la calibración y el modelo final: ~1 min, dentro de la meta de < 3 min.
 
+### 4.3 Implementación (Fase 5)
+- **Código:** `modelo/hgb.py` (receta y modelo), `modelo/validacion.py` (ventanas y origen móvil),
+  `modelo/criterio.py` (§4.2 como función pura, con pruebas) y `modelo/ciclo.py` (MLflow y alias).
+  Las variables se calculan una sola vez y cada corte entrena con las filas `< corte`; como cada
+  variable de `D` solo mira datos `< D`, no hay fuga.
+- **Un solo modelo auxiliar para calibrar `q_f`:** se entrena con datos anteriores a la primera
+  ventana menos 56 días y calibra las ventanas y el modelo final. Todas sus ventanas de
+  calibración caen después de su corte, así que la calibración sigue siendo fuera de muestra.
+  Son 5 ajustes por reentreno en lugar de 8. **Alternativa:** un auxiliar por corte (§3.1 literal),
+  con 60 % más ajustes. Medido en los datos reales: el `q_f` del modelo final cambia como máximo
+  0.026 (bebidas) y el de la primera ventana es idéntico.
+- **Casos límite:** sin vigente, las ventanas son los últimos 21 días de la historia. Si el vigente
+  no guarda su corte (modelos de la Fase 1), también. Si el retador del arranque en frío no
+  mejora al baseline, se registra y promueve el baseline, porque el servicio necesita un modelo.
+  Reentrenar sin días nuevos da "Solo 0 días evaluables…" y no toca `champion` (la versión queda
+  registrada sin alias, como evidencia).
+- **Linaje en MLflow:** cada reentreno deja dos runs con el mismo id: `baseline-<id>` (rol
+  `referencia`, costo del baseline en las mismas ventanas) y `<modelo>-<id>` (rol `retador`):
+  hiperparámetros, `datos_sha256`, rango de fechas, filas, observaciones, corte, ventanas,
+  umbral, versión vigente, commit (`NOVAMERCADO_COMMIT` o git) y versión del paquete; métricas de
+  costo (retador, vigente y baseline, en total y por ventana), MAE/RMSE/WAPE/sesgo, `q_f` por
+  familia y duración; la tabla de ventanas en `evaluacion.json`; la decisión en el tag `decision`.
+- **Medido con el código de producción** (`scripts/evaluar_modelo.py`,
+  `evidencia/modelo/evaluacion_modelo.json`): ene–feb 2026 HGB+cuantil 178 418 vs baseline 310 576
+  (**−42.6 %**); el cuantil baja el costo del HGB 23.9 % frente a sugerir la predicción; sin ningún
+  dato reciente (panel vacío) el HGB cuesta 203 038 vs 433 578 del baseline (−53 %). Reentreno local
+  (10 CPU) ~50 s; en Docker, el DAG completo tarda ~76 s y el arranque en frío deja `/health` en
+  `ok` a los 106 s.
+
 ## 5. Stack y operación
 
 ### 5.1 Airflow 3.3.2 con LocalExecutor
@@ -362,7 +395,7 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
   petición a `/health`.
 - **Justificación:** `/health` responde rápido y el camino de predicción nunca depende de MLflow.
 
-### 5.10 Criterio de promoción provisional (Fase 1)
+### 5.10 Criterio de promoción provisional (Fase 1) — reemplazado por §4 en la Fase 5
 - **Decisión provisional:** promover si `costo_retador ≤ costo_vigente × (1 − CRITERIO_MEJORA_MINIMA)`
   con mínimo 0, evaluando ambos en las mismas 28 fechas con predicción rodante `< D`.
 - **Justificación:** sirve para demostrar el ciclo completo con el baseline. **Se reemplaza** por el
