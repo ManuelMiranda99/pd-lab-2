@@ -274,26 +274,27 @@ observaciones de calidad" o en un rechazo con motivo.
 
 ---
 
-## Fase 6 — Reentrenamiento, hot-reload y resiliencia (endurecimiento)
+## Fase 6 — Reentrenamiento, hot-reload y resiliencia (endurecimiento)  ⏳ 7 de 8 (2026-11-11): falta el check requerido
 **Objetivo:** el ciclo de mejora continua completo y a prueba de fallos.
 
-- [ ] F6.1 DAG completo: extraer histórico + observaciones (unidas con `en_promocion` de la última
+- [x] F6.1 DAG completo: extraer histórico + observaciones (unidas con `en_promocion` de la última
       solicitud válida; F2.6) desde la BD del producto (`AIRFLOW_CONN_…` desde `.env`) → entrenar
       retador → evaluar vs vigente en la misma ventana → registrar → mover alias solo si gana.
-- [ ] F6.2 Orden de escritura: registrar versión → resultado provisional → mover alias → `exitoso`;
+- [x] F6.2 Orden de escritura: registrar versión → resultado provisional → mover alias → `exitoso`;
       `on_failure_callback`/tarea `all_done` escribe `fallido` con motivo. Fallo o no-promoción **no
       toca el alias**.
-- [ ] F6.3 `GET /admin/reentrenar/{id}`: fila terminal → devolverla; no terminal → consultar Airflow
+- [x] F6.3 `GET /admin/reentrenar/{id}`: fila terminal → devolverla; no terminal → consultar Airflow
       (queued/running/up_for_retry → `en_curso`; failed → `fallido`; success sin resultado → `fallido`;
       Airflow caído → `en_curso`); timeout → `fallido`. `promovido`/`version`/`motivo` en `exitoso` **y**
       `fallido`, omitidos en `en_curso`. **`version` = alias vigente al terminar** aunque no se promueva.
-- [ ] F6.4 Políticas de F2.6 implementadas (run en curso, MLflow caído → 503).
-- [ ] F6.5 Ponderar lo reciente / recalibrar cuantiles para cambios de demanda.
-- [ ] F6.6 Hot-reload verificado ≤ 2 min (poll + swap atómico + humo; opcional aviso del DAG a la API).
-- [ ] F6.7 Resiliencia MLflow verificada: predicciones siguen, degradado < 1 min, ok < 2 min; reinicio
+- [x] F6.4 Políticas de F2.6 implementadas (run en curso, MLflow caído → 503).
+- [x] F6.5 Ponderar lo reciente / recalibrar cuantiles para cambios de demanda.
+- [x] F6.6 Hot-reload verificado ≤ 2 min (poll + swap atómico + humo; opcional aviso del DAG a la API).
+- [x] F6.7 Resiliencia MLflow verificada: predicciones siguen, degradado < 1 min, ok < 2 min; reinicio
       con MLflow caído arranca desde la caché.
-- [ ] F6.8 Job de CI `dags` (`tests/test_dags.py`: sin import errors, `reentrenamiento`, sin schedule,
+- [~] F6.8 Job de CI `dags` (`tests/test_dags.py`: sin import errors, `reentrenamiento`, sin schedule,
       `max_active_runs=1`, orden de tareas); agregarlo a los checks requeridos.
+      _(job creado y probado con Airflow 3.3.2; falta sumarlo a la protección de `main` tras el PR)_
 
 ---
 
@@ -414,7 +415,7 @@ observaciones de calidad" o en un rechazo con motivo.
 - ~~Huecos en el periodo evaluado~~ → **mitigado en Fase 5**: lags al último dato, enmascarado al entrenar; sin ningún dato reciente el HGB cuesta −53 % vs baseline (DECISIONES §4.3).
 - **Diciembre 2026** (24/31-dic hasta 4.8× en licores) es el mayor riesgo de costo si se evalúa (F2.2).
 - ~~RAM del stack~~ → **medido: 1.9 GB pico** con LocalExecutor y jobs de MLflow desactivados (F1.11, DECISIONES §5.5).
-- **Reentreno con uno en curso**: la Fase 1 responde 202 y encola un run nuevo; DECISIONES §6.1 dice 202 con el id del run en curso. Unificar en F6.3.
+- ~~Reentreno con uno en curso~~ → **resuelto en Fase 6**: 202 con el id del run en curso, bajo bloqueo consultivo (DECISIONES §6.1).
 - ~~Persistencia de la API~~ → **resuelto en Fase 4** (DECISIONES §5.11).
 - ~~Criterio de promoción provisional~~ → **resuelto en Fase 5**: §4.2 implementado (DECISIONES §4.3).
 - **Checks requeridos progresivos**: agregar a la protección solo los jobs que ya existen.

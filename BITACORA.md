@@ -206,5 +206,85 @@ Toda la fase en una pasada, en la rama `feat/api-persistencia` → PR #7 (squash
 
 ## Sesión 2026-11-11 — Fase 5 (inicio)
 **Fase:** 5 — Modelo ML, cantidad sugerida y criterio de reemplazo
-**Estado al cerrar:** _(sesión abierta)_
-**Plan del día:** F5.1, F5.2, F5.3, F5.4, F5.5
+**Estado al cerrar:** Fase 5 cerrada ✅ (9 de 9) · entrada completada al abrir la Fase 6
+
+Toda la fase en una pasada, en la rama `feat/modelo-ml` → PR #9 (squash, CI verde).
+
+### Logrado
+- F5.1 `features/variables.py`: función única de variables para entrenar y servir (lags a la fecha
+  del último dato, `dias_desde_ultimo_dato`, enmascarado aleatorio de lags al entrenar, cierre de la
+  tienda 7 como faltante, días desde apertura) y `features/calendario.py` (feriados con cruce exacto
+  de ciudad, días de pago, medio día).
+- F5.2 `modelo/validacion.py`: ventanas de 7 días con origen móvil; vigente congelado y retador
+  reentrenado en los mismos días.
+- F5.3 `modelo/hgb.py`: HistGradientBoosting global con pérdida Poisson.
+- F5.4/F5.7 Métricas técnicas y costo; runs `baseline-<id>` (referencia) y `<modelo>-<id>` (retador)
+  en MLflow con linaje completo (sha256, rango, filas, observaciones, corte, commit).
+- F5.5 Cuantil τ del ratio por familia calibrado fuera de muestra con un modelo auxiliar.
+- F5.6 Sin lags el HGB cuesta −53 % frente al baseline: no hace falta respaldo de calendario.
+- F5.8 `modelo/criterio.py`: §4.2 como función pura con `motivo` legible.
+- F5.9 Reentreno ~50 s en local y ~76 s el DAG completo en Docker.
+
+### Verificación
+- `scripts/evaluar_modelo.py` → `evidencia/modelo/evaluacion_modelo.json`: ene–feb 2026 HGB+cuantil
+  178 418 vs baseline 310 576 (**−42.6 %**); el cuantil baja el costo del HGB 23.9 %.
+- pytest: 708 pasan (19 omitidas sin `TEST_DATABASE_URL`); ruff limpio; CI de #9 en verde.
+- Docker: arranque en frío con `/health` en `ok` a los 106 s.
+
+### Decisiones tomadas
+- Implementación del criterio, un solo auxiliar de calibración y casos límite → DECISIONES.md §4.3.
+
+### Pendientes / bloqueos
+- El DAG sigue siendo el de la Fase 1 (`entrenar` + `registrar_fallo`): se completa en la Fase 6.
+- Reentreno con uno en curso (§6.1) sin unificar → F6.3/F6.4.
+
+### Próxima sesión
+- Empezar por: **Fase 6** — F6.1/F6.2 DAG completo con orden de escritura y fallo explícito.
+
+---
+
+## Sesión 2026-11-11 — Fase 6 (inicio)
+**Fase:** 6 — Reentrenamiento, hot-reload y resiliencia (endurecimiento)
+**Estado al cerrar:** Fase 6 en 7 de 8 · solo falta sumar el job `dags` a los checks requeridos
+**Plan del día:** toda la fase (F6.1–F6.8), tras completar la entrada de la Fase 5
+
+Toda la fase en una pasada, en la rama `feat/reentrenamiento` (sin commit todavía).
+
+### Logrado
+- F6.1/F6.2 `modelo/etapas.py` + DAG de cinco tareas: `verificar` → `entrenar` (registra sin
+  alias + resultado provisional en `reentrenamientos.detalle`) → `promover` (solo si gana y el
+  alias no cambió) → `confirmar` (`exitoso`) · `cerrar` (`all_done`) · `fin` (deja el run `failed`).
+  `ciclo.entrenar_y_registrar(mover_alias=False)`; el bootstrap sigue moviendo el alias en un paso.
+- F6.3/F6.4 `servicio/reentreno.py`: `iniciar` con `pg_advisory_lock` de sesión (202 con el id en
+  curso), DAG pausado → 503; `resolver_estado` cierra runs `failed`/vencidos (11 min) coherente
+  con el alias. Router `admin` delgado; id con NUL → 404.
+- F6.5 `pesos_recencia` en `modelo/hgb.py` (configurable, apagado) y `scripts/evaluar_recencia.py`.
+- F6.8 `tests/test_dags.py` + job `dags` en la CI (Airflow 3.3.2 con constraints 3.11).
+
+### Verificación
+- pytest con Postgres 17.6: **751 pasan** (1 omitida: la del DAG, que corre aparte); sin BD 713
+  pasan; `tests/test_dags.py` 4/4 en un venv con Airflow 3.3.2; ruff limpio.
+- Docker (imágenes reconstruidas): reentreno sin días nuevos 36 s, `exitoso` sin promover; 6
+  tareas en `success`. Segundo POST → mismo id. Con 14 días de observaciones (+25 %): 55 s,
+  promueve v7 (−1.9 %) y la API ya la usaba al leer el estado. MLflow detenido a mitad de
+  `entrenar`: `fallido` en 25 s, alias intacto, run `failed`. Resiliencia: `degradado` a los 7 s,
+  predicción 200 en 0.16 s, reentrenar → 503, reinicio de la API con MLflow caído carga v7 de la
+  caché, `ok` a los 8 s del `start`.
+- Recencia (datos reales): ponderar no mejora (730 d: −0.6 % / +0.3 % / −0.3 %); reentrenar tras
+  un choque baja el costo 3.9 % (−20 %) y 3.2 % (+20 %) frente al vigente congelado.
+
+### Decisiones tomadas
+- §4.4 no ponderar lo reciente; §6.1 bloqueo de sesión; §6.4 etapas y orden de escritura; §6.5
+  estados y vencimiento → DECISIONES.md.
+
+### Pendientes / bloqueos
+- Sumar `dags` a los checks requeridos de `main` cuando el PR lo haya corrido (cambio de
+  configuración del repo: con permiso).
+- El volumen local tiene 14 días de observaciones de prueba (2026-03-01…14, choque +25 %) y v7
+  entrenada con ellas. No afecta un clon limpio; para un ensayo limpio local hay que recrear los
+  volúmenes (nunca durante la evaluación).
+- Opcional no hecho: aviso del DAG a la API para recargar (el poller de 20 s ya cumple ≤ 2 min).
+
+### Próxima sesión
+- Empezar por: PR de la Fase 6 → check `dags` requerido → **Fase 7**: F7.1 `scripts/smoke.py`
+  (puede reutilizar el envío de solicitudes/observaciones usado hoy) y F7.3 simulador sin fuga.
