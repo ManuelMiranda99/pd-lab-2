@@ -119,7 +119,7 @@ def test_observacion_con_fecha_ambigua_se_rechaza_y_la_prediccion_advierte():
     assert "FECHA_AMBIGUA" in _codigos(procesar_prediccion(_pred(fecha="03/07/2025"), _catalogo()))
 
 
-def test_observacion_dentro_del_historico_advierte_que_lo_reemplaza():
+def test_observacion_dentro_del_historico_queda_registrada():
     limpia = procesar_observaciones(_obs(fecha="2025-06-15"), _catalogo())
     assert "OBSERVACION_EN_HISTORICO" in _codigos(limpia)
     assert limpia.calidad.estado == "advertencia" and len(limpia.solicitud.ventas) == 1
@@ -137,13 +137,14 @@ def test_hora_imposible_es_ilegible(texto):
     ("texto", "tipo"),
     [
         ("2025-07-02T01:00:00+00:00", "zona"),
-        ("2025-07-02T18:00:00+02:00", "zona"),
+        ("2025-07-02T18:00:00+02:00", "reparado"),  # 10:00 en Guatemala: mismo día
+        ("2025-07-02T03:00:00Z", "zona"),  # 21:00 del día anterior en Guatemala
         ("2025-07-02T00:00:00Z", "reparado"),
         ("2025-07-02T23:00:00-06:00", "reparado"),
         ("2025-07-02T08:30:00", "reparado"),
     ],
 )
-def test_zona_horaria_advierte_salvo_medianoche_utc_u_hora_local(texto, tipo):
+def test_zona_horaria_advierte_solo_si_en_guatemala_es_otro_dia(texto, tipo):
     assert interpretar_fecha(texto) == (date(2025, 7, 2), tipo)
 
 
@@ -175,8 +176,8 @@ def test_promocion_atipica_se_acota_al_maximo_historico():
     cuerpo = _pred(familias=[{"familia_id": "abarrotes", "en_promocion": 2_147_483_647}])
     limpia = procesar_prediccion(cuerpo, _catalogo())
     assert "PROMOCION_ATIPICA" in _codigos(limpia)
-    assert limpia.solicitud.familias[0].en_promocion == 10
-    cuerpo = _pred(familias=[{"familia_id": "abarrotes", "en_promocion": 25}])  # límite 2×10+5
+    assert limpia.solicitud.familias[0].en_promocion == 25  # se acota al límite 2×10+5
+    cuerpo = _pred(familias=[{"familia_id": "abarrotes", "en_promocion": 25}])
     assert "PROMOCION_ATIPICA" not in _codigos(procesar_prediccion(cuerpo, _catalogo()))
 
 
@@ -354,3 +355,136 @@ def test_baseline_guarda_su_corte():
     )
     modelo = ajustar_baseline(historia, {"abarrotes": (1.0, 1.0)})
     assert modelo.fecha_corte == fechas[-1] + pd.Timedelta(days=1)
+
+
+# --- Segunda ronda -------------------------------------------------------------------------------
+
+
+def test_observacion_dentro_del_historico_no_cambia_la_calidad():
+    """El ejemplo del Anexo (2025-11-17, dentro del histórico) debe seguir respondiendo `ok`."""
+    datos = {
+        "tienda_id": 1,
+        "fecha": "2025-06-15",
+        "ventas": [{"familia_id": f, "ventas": 10} for f in _catalogo().familias],
+    }
+    limpia = procesar_observaciones(json.dumps(datos), _catalogo())
+    assert limpia.calidad.estado == "ok" and limpia.calidad.observaciones == []
+    assert "OBSERVACION_EN_HISTORICO" in _codigos(limpia)  # queda en `correcciones` (BD)
+
+
+def test_clave_nombre_descriptiva_no_reemplaza_a_familia_id():
+    cuerpo = _obs()
+    datos = json.loads(cuerpo)
+    datos["ventas"][0]["nombre"] = "Abarrotes secos"
+    limpia = procesar_observaciones(json.dumps(datos), _catalogo())
+    assert [v.familia_id for v in limpia.solicitud.ventas] == ["abarrotes"]
+
+
+def test_copia_nula_de_una_clave_no_tapa_el_valor():
+    cuerpo = (
+        '{"tienda_id":null,"tienda":1,"fecha":"2025-07-02","familias":'
+        '[{"familia_id":"abarrotes","en_promocion":null,"promocion":4}]}'
+    )
+    limpia = procesar_prediccion(cuerpo, _catalogo())
+    assert limpia.solicitud.tienda_id == 1
+    assert {f.familia_id: f.en_promocion for f in limpia.solicitud.familias}["abarrotes"] == 4
+    assert "PROMOCION_FALTANTE" not in _codigos(limpia)
+
+
+def test_faltante_nombra_las_claves_no_reconocidas():
+    cuerpo = '{"tienda_codigoX":1,"fecha":"2025-07-02","familias":[{"familia_id":"abarrotes"}]}'
+    with pytest.raises(SolicitudRechazada) as exc:
+        procesar_prediccion(cuerpo, _catalogo())
+    assert "tienda_codigoX" in exc.value.detail
+
+
+def test_lista_enorme_se_rechaza():
+    familias = [{"familia_id": f"x{i}", "en_promocion": 0} for i in range(201)]
+    with pytest.raises(SolicitudRechazada) as exc:
+        procesar_prediccion(_pred(familias=familias), _catalogo())
+    assert exc.value.codigo == "LISTA_GRANDE"
+
+
+def test_familia_aproximada_no_se_guarda_en_observaciones_y_exacta_gana_en_prediccion():
+    datos = json.loads(_obs(familia="abarrote"))
+    datos["ventas"].append({"familia_id": "lacteos", "ventas": 5})
+    limpia = procesar_observaciones(json.dumps(datos), _catalogo())
+    assert "FAMILIA_APROXIMADA_OBS" in _codigos(limpia)
+    assert [v.familia_id for v in limpia.solicitud.ventas] == ["lacteos"]
+    familias = [
+        {"familia_id": "abarrotes", "en_promocion": 2},
+        {"familia_id": "abarrote", "en_promocion": 9},
+    ]
+    limpia = procesar_prediccion(_pred(familias=familias), _catalogo())
+    assert {f.familia_id: f.en_promocion for f in limpia.solicitud.familias}["abarrotes"] == 2
+
+
+def test_zona_horaria_de_otro_dia_se_rechaza_en_observaciones():
+    with pytest.raises(SolicitudRechazada) as exc:
+        procesar_observaciones(_obs(fecha="2025-07-02T03:00:00Z"), _catalogo())
+    assert exc.value.codigo == "FECHA_ZONA_OBS"
+    limpia = procesar_observaciones(_obs(fecha="2025-07-02T12:00:00Z"), _catalogo())
+    assert "FECHA_ZONA" not in _codigos(limpia)
+
+
+def test_coma_con_tres_decimales_en_promocion_es_ambigua():
+    cuerpo = _pred(familias=[{"familia_id": "abarrotes", "en_promocion": "2,500"}])
+    limpia = procesar_prediccion(cuerpo, _catalogo())
+    assert "PROMOCION_AMBIGUA" in _codigos(limpia)
+    assert {f.familia_id: f.en_promocion for f in limpia.solicitud.familias}["abarrotes"] == 3
+    # En ventas, "1,292" sigue siendo miles (E10).
+    assert procesar_observaciones(_obs(ventas="1,292"), replace(_catalogo(), max_ventas={}))
+
+
+def test_item_que_es_solo_la_familia_y_ventas_sin_clave_reconocida():
+    limpia = procesar_prediccion(_pred(familias=["abarrotes"]), _catalogo())
+    assert "ITEM_SOLO_FAMILIA" in _codigos(limpia)
+    cuerpo = json.dumps(
+        {"tienda_id": 1, "fecha": "2025-07-02", "ventas": [{"familia_id": "abarrotes", "monto": 5}]}
+    )
+    limpia = procesar_observaciones(cuerpo, _catalogo())
+    detalles = " ".join(o.detalle for o in limpia.calidad.observaciones)
+    assert "no llegó la clave 'ventas'" in detalles and "monto" in detalles
+
+
+@pytest.mark.parametrize("valor", ["T2.0", "Tienda 2.00", "2,0", "T02"])
+def test_sufijo_decimal_nulo_en_tienda(valor):
+    assert normalizar_tienda(valor, _catalogo())[0] == 2
+
+
+def test_post_reentrenar_con_barra_final_no_es_405():
+    cliente, _ = _cliente(modelo=_modelo(), salud=TODO_OK)
+    with cliente:
+        r = cliente.post("/admin/reentrenar/", follow_redirects=False)
+    assert r.status_code in (202, 503)
+
+
+def test_espacio_de_ancho_cero_y_guion_unicode():
+    assert interpretar_fecha("\u200b2025-07-02")[0] == date(2025, 7, 2)
+    limpia = procesar_observaciones(_obs(ventas="\u22124"), _catalogo())
+    assert "VENTAS_NEGATIVAS" in _codigos(limpia)  # "−4" es negativo, no texto ilegible
+
+
+def test_ventanas_solo_con_dias_completos():
+    from novamercado.modelo.validacion import ventanas_evaluacion
+
+    dias = list(pd.date_range("2026-06-01", periods=21, freq="D"))
+    filas = [d for d in dias[:14] for _ in range(10)] + [d for d in dias[14:] for _ in range(1)]
+    v = ventanas_evaluacion(filas, dias[0])
+    assert [len(x) for x in v] == [7, 7] and v[-1][-1] == dias[13]  # los días de 1 fila no cuentan
+
+
+def test_huella_de_entrenamiento_cambia_con_una_observacion_y_no_con_el_orden():
+    from novamercado.modelo.ciclo import huella_entrenamiento
+
+    h = pd.DataFrame(
+        {
+            "tienda_id": [1, 1],
+            "fecha": pd.to_datetime(["2026-01-01", "2026-01-02"]),
+            "familia_id": ["a", "a"],
+            "ventas": [1.0, 2.0],
+            "en_promocion": [0.0, float("nan")],
+        }
+    )
+    assert huella_entrenamiento(h) == huella_entrenamiento(h.iloc[::-1])
+    assert huella_entrenamiento(h) != huella_entrenamiento(h.assign(ventas=[1.0, 3.0]))

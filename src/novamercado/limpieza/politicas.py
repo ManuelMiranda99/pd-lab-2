@@ -152,7 +152,7 @@ _FILAS: tuple[Politica, ...] = (
         "Falta `tienda_id` o es nulo",
         _X,
         "422",
-        "falta el identificador de tienda",
+        "falta el identificador de tienda{claves}",
     ),
     Politica(
         "TIENDA_ILEGIBLE",
@@ -179,10 +179,19 @@ _FILAS: tuple[Politica, ...] = (
     ),
     Politica(
         "FECHA_ZONA",
-        "Fecha con hora y zona horaria (`…T01:00:00+00:00`)",
+        "Predicción: fecha con hora y zona horaria cuyo día en Guatemala (UTC−6) no es el escrito "
+        "(`…T03:00:00Z`)",
         _A,
         "se usa el día escrito, sin convertir la zona horaria",
-        "'{recibido}' trae zona horaria; se usó el día escrito ({fecha}) sin convertirla",
+        "'{recibido}' trae zona horaria y en Guatemala es otro día; "
+        "se usó el día escrito ({fecha})",
+    ),
+    Politica(
+        "FECHA_ZONA_OBS",
+        "Observación: fecha con hora y zona horaria cuyo día en Guatemala no es el escrito",
+        _X,
+        "422",
+        "'{recibido}' trae zona horaria y en Guatemala es otro día; envíe la fecha como AAAA-MM-DD",
     ),
     Politica(
         "FECHA_AMBIGUA",
@@ -199,7 +208,7 @@ _FILAS: tuple[Politica, ...] = (
         "422",
         "'{recibido}' es ambigua (día/mes o mes/día); envíe la fecha como AAAA-MM-DD",
     ),
-    Politica("FECHA_FALTANTE", "Falta `fecha` o es nula", _X, "422", "falta la fecha"),
+    Politica("FECHA_FALTANTE", "Falta `fecha` o es nula", _X, "422", "falta la fecha{claves}"),
     Politica(
         "FECHA_ILEGIBLE",
         "Fecha ilegible o imposible (`2025-02-30`, año de 2 dígitos, hora `25:00`)",
@@ -241,8 +250,8 @@ _FILAS: tuple[Politica, ...] = (
     Politica(
         "OBSERVACION_EN_HISTORICO",
         "Observación de un día que ya está en el histórico publicado",
-        _A,
-        "se guarda y reemplaza al dato publicado en el panel (§5.8)",
+        _I,
+        "se guarda y reemplaza al dato publicado en el panel (§5.8); queda en `correcciones`",
         "la fecha {fecha} está dentro del histórico publicado (hasta {fin}); "
         "la observación reemplaza al dato publicado",
     ),
@@ -276,6 +285,20 @@ _FILAS: tuple[Politica, ...] = (
         "'{lista}' era un solo ítem; se trató como una lista de un elemento",
     ),
     Politica(
+        "LISTA_GRANDE",
+        "Lista de familias con más de 200 ítems (el catálogo tiene 12)",
+        _X,
+        "422",
+        "'{lista}' tiene {n} ítems; el máximo es {limite}",
+    ),
+    Politica(
+        "ITEM_SOLO_FAMILIA",
+        'Ítem que es solo el texto de una familia (`["abarrotes", …]`)',
+        _R,
+        'se interpreta como `{"familia_id": …}`',
+        "el ítem era solo la familia '{recibido}'; se interpretó como su familia_id",
+    ),
+    Politica(
         "ITEM_COMO_TEXTO",
         'Ítem de la lista enviado como texto JSON (`"{\\"familia_id\\": …}"`)',
         _R,
@@ -299,10 +322,17 @@ _FILAS: tuple[Politica, ...] = (
     ),
     Politica(
         "FAMILIA_APROXIMADA",
-        "Familia con coincidencia aproximada única (`lacteo`)",
+        "Predicción: familia con coincidencia aproximada única (`lacteo`, `frutas`)",
         _A,
-        "se usa la familia más cercana",
+        "se usa la familia más cercana (una coincidencia exacta repetida tiene prioridad)",
         "'{recibido}' no coincide exactamente; se asumió '{familia}'",
+    ),
+    Politica(
+        "FAMILIA_APROXIMADA_OBS",
+        "Observación: familia con coincidencia aproximada (`beb`: ¿bebé o bebidas?)",
+        _A,
+        "no se guarda esa familia (guardar ventas en una familia adivinada sería inventar datos)",
+        "'{recibido}' no coincide exactamente (¿'{familia}'?); no se guardó",
     ),
     Politica(
         "FAMILIA_DESCONOCIDA",
@@ -381,17 +411,17 @@ _FILAS: tuple[Politica, ...] = (
     ),
     Politica(
         "PROMOCION_AMBIGUA",
-        '`en_promocion` con punto y tres decimales (`"1.000"`: ¿uno o mil?)',
+        '`en_promocion` con un separador y tres decimales (`"1.000"`, `"2,500"`)',
         _A,
-        "se lee con punto decimal (los valores de promoción son pequeños)",
-        "'{recibido}' es ambiguo (punto decimal o de miles); se interpretó como {valor}",
+        "se lee como decimal y se redondea (los valores de promoción son pequeños)",
+        "'{recibido}' es ambiguo (separador decimal o de miles); se interpretó como {valor}",
     ),
     Politica(
         "PROMOCION_ATIPICA",
         "`en_promocion` muy por encima del máximo histórico de la familia",
         _A,
-        "se usa el máximo histórico de la familia",
-        "{valor} supera {limite} (máximo histórico de la familia: {maximo}); se usó {maximo}",
+        "se acota al límite (`2 × máximo histórico + 5`)",
+        "{valor} supera {limite} (máximo histórico de la familia: {maximo}); se usó {limite}",
     ),
     Politica(
         "VENTAS_NEGATIVAS",

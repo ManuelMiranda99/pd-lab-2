@@ -13,7 +13,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
-from decimal import ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Literal, TypeVar
 
 from novamercado.contrato.entrada import (
@@ -31,6 +31,7 @@ from novamercado.limpieza.normalizadores import (
     ALIAS_ITEM_PREDICCION,
     ALIAS_OBSERVACIONES,
     ALIAS_PREDICCION,
+    COMA_AMBIGUA,
     Candidato,
     ClavesResueltas,
     interpretar_numero,
@@ -38,6 +39,7 @@ from novamercado.limpieza.normalizadores import (
     normalizar_fecha,
     normalizar_tienda,
     resolver_claves,
+    sin_invisibles,
 )
 
 T = TypeVar("T")
@@ -79,8 +81,15 @@ class ObservacionesLimpias:
 
 def politica_promocion(valor: Any, campo: str) -> tuple[int, list[Hallazgo]]:
     """``en_promocion``: siempre devuelve un entero ≥ 0 (valor por defecto 0 si no es válido)."""
-    n = interpretar_numero(valor)
     recibido = mostrar(valor)
+    if isinstance(valor, str) and COMA_AMBIGUA.fullmatch(sin_invisibles(valor).strip()):
+        # "2,500": en promoción (valores pequeños) se lee con coma decimal, y se advierte.
+        decimal = Decimal(sin_invisibles(valor).strip().replace(",", "."))
+        entero = abs(int(decimal.to_integral_value(rounding=ROUND_HALF_UP)))
+        return entero, [
+            Hallazgo("PROMOCION_AMBIGUA", campo, {"recibido": recibido, "valor": entero})
+        ]
+    n = interpretar_numero(valor)
     if n.estado == "faltante":
         return 0, [Hallazgo("PROMOCION_FALTANTE", campo)]
     if n.estado == "invalido":
@@ -132,6 +141,9 @@ def _huella(valor: Any) -> str:
     return json.dumps(valor, sort_keys=True, default=repr, ensure_ascii=False)
 
 
+#: Ítems máximos de la lista de familias (el catálogo tiene 12; evita trabajo y respuestas enormes).
+LIMITE_ITEMS = 200
+
 #: Valores que se listan en un mensaje antes de resumir (una lista enorme no infla la respuesta).
 _MAX_VALORES_MENSAJE = 10
 
@@ -152,6 +164,10 @@ def limite_promocion(maximo: int) -> int:
     return FACTOR_ATIPICO_PROMOCION * maximo + MARGEN_ATIPICO_PROMOCION
 
 
+def _recortar(texto: str, largo: int = 300) -> str:
+    return texto if len(texto) <= largo else texto[: largo - 2] + "…)"
+
+
 def _texto_valores(valores: list[Any]) -> str:
     textos = ["null" if v is None else str(v) for v in valores]
     if len(textos) <= _MAX_VALORES_MENSAJE:
@@ -170,6 +186,20 @@ def _sin_repetidos(hallazgos: list[Hallazgo]) -> tuple[Hallazgo, ...]:
     return tuple(unicos)
 
 
+def _es_nulo(valor: Any) -> bool:
+    return valor is None or (isinstance(valor, str) and not valor.strip())
+
+
+def _sin_nulos(candidatos: list[Candidato]) -> list[Candidato]:
+    """Si una clave llega repetida (o con alias) y alguna copia es nula, cuenta la que trae valor:
+    ``{"tienda_id": null, "tienda": 7}`` es la tienda 7, no una tienda faltante."""
+    con_valor = [c for c in candidatos if not _es_nulo(c.valor)]
+    return con_valor or candidatos
+
+
+_FALTANTE = {"tienda_id": "TIENDA_FALTANTE", "fecha": "FECHA_FALTANTE"}
+
+
 def _identidad(
     res: ClavesResueltas,
     canonica: str,
@@ -177,9 +207,11 @@ def _identidad(
     hallazgos: list[Hallazgo],
 ) -> T:
     """Resuelve un campo de identidad: falta o conflicto → 422; repetido igual → reparar."""
-    candidatos = res.candidatos.get(canonica, [])
+    candidatos = _sin_nulos(res.candidatos.get(canonica, []))
     if not candidatos:
-        return normalizar(None, canonica)[0]  # lanza el rechazo de "faltante"
+        # Faltante: el 422 nombra las claves que llegaron y no se reconocieron.
+        claves = f" (claves no reconocidas: {', '.join(res.ignoradas)})" if res.ignoradas else ""
+        raise SolicitudRechazada(_FALTANTE[canonica], canonica, claves=_recortar(claves))
     resultados = [normalizar(c.valor, c.clave) for c in candidatos]
     valores = [r[0] for r in resultados]
     if len(candidatos) > 1:
@@ -227,6 +259,10 @@ def _items(
         # Un solo ítem enviado sin la lista: {"familia_id": "abarrotes", "en_promocion": 3}.
         hallazgos.append(Hallazgo("LISTA_UN_ITEM", clave, {"lista": clave}))
         return clave, [(f"{clave}[0]", valor)]
+    if isinstance(valor, list | dict) and len(valor) > LIMITE_ITEMS:
+        raise SolicitudRechazada(
+            "LISTA_GRANDE", clave, lista=clave, n=len(valor), limite=LIMITE_ITEMS
+        )
     if isinstance(valor, list):
         items = [(f"{clave}[{i}]", item) for i, item in enumerate(valor)]
     elif isinstance(valor, dict) and valor:
@@ -255,6 +291,7 @@ def _campo_item(
     Repetido con el mismo valor → reparar; con valores distintos → advertir y usar el último
     (predicción) o no guardar (observaciones, ``en_conflicto=True``).
     """
+    candidatos = _sin_nulos(candidatos)
     resultados = [evaluar(c.valor, f"{base}.{c.clave}") for c in candidatos]
     for _, hs in resultados:
         hallazgos.extend(hs)
@@ -275,13 +312,21 @@ def _campo_item(
     return valores[-1], False
 
 
-def _evaluar_familia(catalogo: Catalogo) -> Callable[[Any, str], tuple[str | None, list[Hallazgo]]]:
+def _evaluar_familia(
+    catalogo: Catalogo, tipo_solicitud: Tipo, aproximadas: set[str]
+) -> Callable[[Any, str], tuple[str | None, list[Hallazgo]]]:
+    """Evalúa la familia de un ítem. En observaciones una familia aproximada no se guarda; en
+    predicción se usa, y su campo queda en ``aproximadas`` (una exacta repetida gana)."""
+
     def evaluar(valor: Any, campo: str) -> tuple[str | None, list[Hallazgo]]:
         fid, tipo = normalizar_familia(valor, catalogo)
         datos = {"recibido": mostrar(valor), "familia": fid}
         if tipo == "reparado":
             return fid, [Hallazgo("FAMILIA_FORMATO", campo, datos)]
+        if tipo == "aproximada" and tipo_solicitud == "observaciones":
+            return None, [Hallazgo("FAMILIA_APROXIMADA_OBS", campo, datos)]
         if tipo == "aproximada":
+            aproximadas.add(campo)
             return fid, [Hallazgo("FAMILIA_APROXIMADA", campo, datos)]
         if tipo == "desconocida":
             return None, [Hallazgo("FAMILIA_DESCONOCIDA", campo, datos)]
@@ -295,6 +340,7 @@ class _Entrada:
     familia_id: str
     valor: Any
     base: str
+    aproximada: bool = False
 
 
 def _item_desde_texto(item: Any) -> Any:
@@ -322,13 +368,18 @@ def _limpiar_items(
     alias = ALIAS_ITEM_PREDICCION if tipo == "prediccion" else ALIAS_ITEM_OBSERVACIONES
     campo_valor = "en_promocion" if tipo == "prediccion" else "ventas"
     evaluar_valor = politica_promocion if tipo == "prediccion" else politica_ventas
-    evaluar_familia = _evaluar_familia(catalogo)
+    aproximadas: set[str] = set()
+    evaluar_familia = _evaluar_familia(catalogo, tipo, aproximadas)
     entradas: list[_Entrada] = []
     for base, item in items:
         decodificado = _item_desde_texto(item)
         if decodificado is not item:
             hallazgos.append(Hallazgo("ITEM_COMO_TEXTO", base))
             item = decodificado
+        elif isinstance(item, str) and item.strip():
+            # ["abarrotes", "bebidas"]: el ítem es solo la familia.
+            hallazgos.append(Hallazgo("ITEM_SOLO_FAMILIA", base, {"recibido": mostrar(item)}))
+            item = {"familia_id": item}
         if not isinstance(item, dict):
             hallazgos.append(Hallazgo("ITEM_INVALIDO", base, {"tipo": mostrar(item)}))
             continue
@@ -347,11 +398,26 @@ def _limpiar_items(
         )
         if fid is None or conflicto:
             continue
+        aproximada = any(c.startswith(f"{base}.") for c in aproximadas)
+        if campo_valor not in res.candidatos and tipo == "observaciones":
+            # La clave de ventas no llegó (o con un nombre no reconocido): se dice así.
+            motivo = "no llegó la clave 'ventas'"
+            if res.ignoradas:
+                motivo += f"; claves no reconocidas: {', '.join(res.ignoradas)}"
+            hallazgos.append(
+                Hallazgo(
+                    "VENTAS_INVALIDAS",
+                    f"{base}.ventas",
+                    {"recibido": "(ausente)", "motivo": _recortar(motivo, 200)},
+                )
+            )
+            entradas.append(_Entrada(fid, None, base, aproximada))
+            continue
         cand_valor = res.candidatos.get(campo_valor, [Candidato(campo_valor, None)])
         valor, conflicto = _campo_item(
             cand_valor, base, campo_valor, evaluar_valor, tipo, hallazgos
         )
-        entradas.append(_Entrada(fid, None if conflicto else valor, base))
+        entradas.append(_Entrada(fid, None if conflicto else valor, base, aproximada))
     return entradas
 
 
@@ -407,6 +473,8 @@ def limpiar_prediccion(
 
     familias: list[FamiliaPromocion] = []
     for fid, grupo in grupos.items():
+        exactas = [e for e in grupo if not e.aproximada]
+        grupo = exactas or grupo  # una coincidencia exacta tiene prioridad sobre una aproximada
         valores = [e.valor for e in grupo]
         if len(grupo) > 1:
             ultima = grupo[-1]
@@ -426,7 +494,7 @@ def limpiar_prediccion(
                     {"valor": promocion, "limite": limite_promocion(maximo), "maximo": maximo},
                 )
             )
-            promocion = maximo
+            promocion = limite_promocion(maximo)
         familias.append(FamiliaPromocion(familia_id=fid, en_promocion=promocion))
 
     faltantes = tuple(f for f in catalogo.familias if f not in grupos)

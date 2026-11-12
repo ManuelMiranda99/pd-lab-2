@@ -199,7 +199,7 @@ def test_fecha_antes_de_apertura():
         ("", None, "desconocida"),
         (None, None, "desconocida"),
         (7, None, "desconocida"),
-        ("frutas", None, "desconocida"),
+        ("frutas", "frutas_verduras", "aproximada"),  # palabra completa de un solo nombre
     ],
 )
 def test_normalizar_familia(valor, familia, tipo):

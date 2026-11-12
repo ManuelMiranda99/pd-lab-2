@@ -12,7 +12,7 @@ import math
 import re
 import unicodedata
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
 
@@ -30,6 +30,14 @@ def sin_acentos(texto: str) -> str:
     """NFKC + elimina marcas diacríticas (``"Lácteos"`` → ``"Lacteos"``)."""
     descompuesto = unicodedata.normalize("NFKD", unicodedata.normalize("NFKC", texto))
     return "".join(c for c in descompuesto if not unicodedata.combining(c))
+
+
+_INVISIBLES = re.compile("[\u200b-\u200f\u2060\ufeff]")
+
+
+def sin_invisibles(texto: str) -> str:
+    """Quita caracteres de ancho cero y marcas de dirección; ``−`` (U+2212) pasa a ``-``."""
+    return _INVISIBLES.sub("", texto).replace("\u2212", "-")
 
 
 def forma_canonica(texto: str) -> str:
@@ -69,6 +77,10 @@ ALIAS_PREDICCION: dict[str, frozenset[str]] = {
             "id_sucursal",
             "numero_tienda",
             "num_tienda",
+            "tienda_codigo",
+            "tienda_numero",
+            "store_number",
+            "shop_id",
         }
     ),
     "fecha": frozenset(
@@ -80,6 +92,9 @@ ALIAS_PREDICCION: dict[str, frozenset[str]] = {
             "fecha_pronostico",
             "fecha_venta",
             "fecha_observacion",
+            "day",
+            "dia_venta",
+            "fecha_dia",
         }
     ),
     "familias": frozenset(
@@ -87,6 +102,7 @@ ALIAS_PREDICCION: dict[str, frozenset[str]] = {
             "familias",
             "familia",
             "families",
+            "categorias",
             "items",
             "detalle",
             "productos",
@@ -108,6 +124,7 @@ ALIAS_OBSERVACIONES: dict[str, frozenset[str]] = {
             "detalle",
             "lineas",
             "ventas_reales",
+            "sales",
         }
     ),
 }
@@ -122,7 +139,8 @@ _ALIAS_FAMILIA = frozenset(
         "categoria",
         "categoria_id",
         "nombre_familia",
-        "nombre",
+        "category",
+        "category_id",
     }
 )
 ALIAS_ITEM_PREDICCION: dict[str, frozenset[str]] = {
@@ -138,13 +156,33 @@ ALIAS_ITEM_PREDICCION: dict[str, frozenset[str]] = {
             "productos_en_promocion",
             "num_promociones",
             "cantidad_promocion",
+            "on_promotion",
+            "onpromotion",
+            "num_promos",
+            "promotions",
+            "ofertas",
         }
     ),
 }
 ALIAS_ITEM_OBSERVACIONES: dict[str, frozenset[str]] = {
     "familia_id": _ALIAS_FAMILIA,
     "ventas": frozenset(
-        {"ventas", "venta", "unidades", "cantidad", "unidades_vendidas", "ventas_reales", "valor"}
+        {
+            "ventas",
+            "venta",
+            "unidades",
+            "cantidad",
+            "unidades_vendidas",
+            "ventas_reales",
+            "venta_real",
+            "vendido",
+            "vendidas",
+            "sales",
+            "qty",
+            "quantity",
+            "units",
+            "valor",
+        }
     ),
 }
 
@@ -219,7 +257,10 @@ _PATRONES_NUMERO: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (re.compile(rf"{_SIGNO}\d+[eE]{_SIGNO}\d+"), "", ""),
 )
 #: ``"1.000"``: punto decimal o separador de miles (en Guatemala se usan ambos). Ambiguo.
-_PUNTO_AMBIGUO = re.compile(rf"{_SIGNO}\d{{1,3}}\.\d{{3}}")
+_PUNTO_AMBIGUO = re.compile(rf"{_SIGNO}[1-9]\d{{0,2}}\.\d{{3}}")
+#: ``"2,500"``: separador de miles (E10) o coma decimal. Solo es ambiguo donde los valores son
+#: pequeños (promociones); en ventas el catálogo de errores lo define como miles.
+COMA_AMBIGUA = re.compile(rf"{_SIGNO}[1-9]\d{{0,2}},\d{{3}}")
 _EXPONENTE = re.compile(r"\d\s*[eE]\s*[+-]?\d")
 
 
@@ -277,7 +318,7 @@ def interpretar_numero(valor: Any) -> Numero:
             return Numero("invalido", motivo="no es finito")
         return _desde_decimal(Decimal(repr(valor)), reparado=True)
     if isinstance(valor, str):
-        texto = unicodedata.normalize("NFKC", valor).replace(" ", " ").strip()
+        texto = sin_invisibles(unicodedata.normalize("NFKC", valor)).replace(" ", " ").strip()
         texto = texto.replace("'", "").replace("_", "")
         if not texto:
             return Numero("faltante", motivo="texto vacío")
@@ -300,6 +341,8 @@ def interpretar_numero(valor: Any) -> Numero:
 # ---------------------------------------------------------------------------------------------
 
 _PATRON_TIENDA = re.compile(r"(?:t|tda|tienda|store|sucursal|no|num|n)?_?0*(\d{1,9})")
+#: Sufijo decimal nulo de una exportación de Excel/pandas (``"T5.0"``, ``"Tienda 5,00"``).
+_SUFIJO_CERO = re.compile(r"(?<=\d)[.,]0{1,2}$")  # "1.000" sigue siendo ambiguo
 
 
 def normalizar_tienda(
@@ -310,7 +353,7 @@ def normalizar_tienda(
     Rechaza si falta, si no se puede interpretar o si no existe en el catálogo.
     """
     if valor is None:
-        raise SolicitudRechazada("TIENDA_FALTANTE", campo)
+        raise SolicitudRechazada("TIENDA_FALTANTE", campo, claves="")
     tienda_id: int | None = None
     if isinstance(valor, bool | list | dict | NoRepresentable):
         tienda_id = None
@@ -318,10 +361,11 @@ def normalizar_tienda(
         num = interpretar_numero(valor)
         tienda_id = num.valor if num.estado in ("ok", "reparado") else None  # type: ignore[assignment]
     elif isinstance(valor, str):
-        forma = forma_canonica(valor)
-        num = interpretar_numero(valor)
+        texto = _SUFIJO_CERO.sub("", sin_invisibles(valor).strip())
+        forma = forma_canonica(texto)
+        num = interpretar_numero(texto)
         coincidencia = _PATRON_TIENDA.fullmatch(forma)
-        if _EXPONENTE.search(valor):
+        if _EXPONENTE.search(texto):
             tienda_id = None  # "1e1": no es una lectura inequívoca de un id
         elif num.estado in ("ok", "reparado", "decimal", "ambiguo"):
             tienda_id = num.valor if num.estado in ("ok", "reparado") else None  # type: ignore[assignment]
@@ -334,7 +378,7 @@ def normalizar_tienda(
             tienda_id = por_nombre[0] if len(por_nombre) == 1 else None
     if tienda_id is None:
         if isinstance(valor, str) and not valor.strip():
-            raise SolicitudRechazada("TIENDA_FALTANTE", campo)
+            raise SolicitudRechazada("TIENDA_FALTANTE", campo, claves="")
         raise SolicitudRechazada("TIENDA_ILEGIBLE", campo, recibido=mostrar(valor))
     if tienda_id not in catalogo.tiendas:
         raise SolicitudRechazada("TIENDA_INEXISTENTE", campo, tienda_id=tienda_id)
@@ -370,6 +414,18 @@ def _construir(anio: str, mes: str, dia: str) -> date | None:
 
 TipoFecha = Literal["ok", "reparado", "ambigua", "zona"]
 
+#: Guatemala no tiene horario de verano: UTC−6 todo el año.
+_MINUTOS_GUATEMALA = -6 * 60
+
+
+def _desfase_minutos(zona: str) -> int:
+    """``Z`` → 0; ``-06:00``/``-0600`` → −360."""
+    if zona.upper() == "Z":
+        return 0
+    signo = -1 if zona[0] == "-" else 1
+    digitos = zona[1:].replace(":", "")
+    return signo * (int(digitos[:2]) * 60 + int(digitos[2:]))
+
 
 def _hora_valida(hora: str, minuto: str, segundo: str | None) -> bool:
     return int(hora) <= 23 and int(minuto) <= 59 and (segundo is None or int(segundo) <= 59)
@@ -382,7 +438,8 @@ def interpretar_fecha(valor: Any) -> tuple[date, TipoFecha]:
     ``AAAAMMDD`` (texto o entero), ``DD/MM/AAAA`` (reparado); ``D/M/AAAA`` con ambos ≤ 12 y
     distintos → ``ambigua`` (se interpreta día/mes). Si el primer número es ≤ 12 y el segundo
     > 12, la única lectura posible es mes/día (reparado). Una hora imposible (``T25:00``) es
-    ilegible; con zona horaria (``Z`` o ``±HH:MM``) se usa el día escrito → ``zona``.
+    ilegible. Con zona horaria (``Z`` o ``±HH:MM``) se usa el día escrito: si en Guatemala
+    (UTC−6) ese instante cae en otro día → ``zona`` (salvo medianoche UTC, que es "solo el día").
     """
     if isinstance(valor, bool):
         raise ValueError("booleano")
@@ -390,7 +447,7 @@ def interpretar_fecha(valor: Any) -> tuple[date, TipoFecha]:
         valor = str(valor)
     if not isinstance(valor, str):
         raise ValueError("tipo no admitido")
-    texto = unicodedata.normalize("NFKC", valor).strip()
+    texto = sin_invisibles(unicodedata.normalize("NFKC", valor)).strip()
     if m := _ISO.fullmatch(texto):
         d = _construir(*m.groups())
         if d is not None:
@@ -400,11 +457,15 @@ def interpretar_fecha(valor: Any) -> tuple[date, TipoFecha]:
         d = _construir(anio, mes, dia)
         if d is None or not _hora_valida(hora, minuto, segundo):
             raise ValueError("fecha u hora imposible")
+        if zona is None:
+            return d, "reparado"
+        desfase = _desfase_minutos(zona)
         medianoche = int(hora) == 0 and int(minuto) == 0 and int(segundo or 0) == 0
-        utc = zona is not None and zona.upper() in ("Z", "+00:00", "+0000", "-00:00")
-        local = zona in ("-06:00", "-0600")  # hora de Guatemala: el día escrito es el local
+        instante = datetime(d.year, d.month, d.day, int(hora), int(minuto), int(segundo or 0))
+        utc = instante - timedelta(minutes=desfase)
+        dia_local = (utc + timedelta(minutes=_MINUTOS_GUATEMALA)).date()
         # Medianoche UTC es la forma habitual de serializar "solo el día": inequívoca.
-        inequivoca = zona is None or local or (medianoche and utc)
+        inequivoca = dia_local == d or (medianoche and desfase == 0)
         return d, "reparado" if inequivoca else "zona"
     for patron in (_ISO_FLEXIBLE, _COMPACTA):
         if m := patron.fullmatch(texto):
@@ -445,7 +506,7 @@ def normalizar_fecha(
       observación de esas fechas reemplaza al dato publicado y se advierte.
     """
     if valor is None or (isinstance(valor, str) and not valor.strip()):
-        raise SolicitudRechazada("FECHA_FALTANTE", campo)
+        raise SolicitudRechazada("FECHA_FALTANTE", campo, claves="")
     try:
         fecha, formato = interpretar_fecha(valor)
     except ValueError:
@@ -455,6 +516,8 @@ def normalizar_fecha(
     if formato == "reparado":
         hallazgos.append(Hallazgo("FECHA_FORMATO", campo, datos))
     elif formato == "zona":
+        if tipo == "observaciones":
+            raise SolicitudRechazada("FECHA_ZONA_OBS", campo, recibido=datos["recibido"])
         hallazgos.append(Hallazgo("FECHA_ZONA", campo, datos))
     elif formato == "ambigua":
         if tipo == "observaciones":
@@ -508,14 +571,35 @@ def normalizar_fecha(
 _UMBRAL_DIFUSO = 0.8
 
 
-def _indice_familias(catalogo: Catalogo) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+_INDICES: dict[
+    int, tuple[Catalogo, dict[str, set[str]], dict[str, set[str]], dict[str, set[str]]]
+] = {}
+
+
+def _indice_familias(
+    catalogo: Catalogo,
+) -> tuple[dict[str, set[str]], dict[str, set[str]], dict[str, set[str]]]:
+    """Índices por forma canónica, compacta y por palabra (≥ 4 letras) del id o del nombre.
+
+    Se calculan una vez por catálogo (el catálogo es inmutable y vive mientras corre el servicio).
+    """
+    guardado = _INDICES.get(id(catalogo))
+    if guardado is not None and guardado[0] is catalogo:
+        return guardado[1], guardado[2], guardado[3]
     canonicas: dict[str, set[str]] = {}
     compactas: dict[str, set[str]] = {}
+    palabras: dict[str, set[str]] = {}
     for fid, nombre in catalogo.familias.items():
         for texto in (fid, nombre):
             canonicas.setdefault(forma_canonica(texto), set()).add(fid)
             compactas.setdefault(forma_compacta(texto), set()).add(fid)
-    return canonicas, compactas
+            for palabra in forma_canonica(texto).split("_"):
+                if len(palabra) >= 4:
+                    palabras.setdefault(palabra, set()).add(fid)
+    if len(_INDICES) > 32:
+        _INDICES.clear()
+    _INDICES[id(catalogo)] = (catalogo, canonicas, compactas, palabras)
+    return canonicas, compactas, palabras
 
 
 def normalizar_familia(
@@ -524,14 +608,14 @@ def normalizar_familia(
     """Busca la familia por id **y** por nombre del catálogo.
 
     Coincidencia exacta → ``ok``; única tras normalizar (mayúsculas, acentos, espacios, ``_ - &
-    y``) → ``reparado``; única aproximada (similitud ≥ 0.8) → ``aproximada``; si no →
-    ``desconocida`` (``None``).
+    y``) → ``reparado``; una palabra completa de un solo id o nombre (``"frutas"`` → frutas y
+    verduras) o única aproximada (similitud ≥ 0.8) → ``aproximada``; si no → ``desconocida``.
     """
     if not isinstance(valor, str):
         return None, "desconocida"
     if valor in catalogo.familias:
         return valor, "ok"
-    canonicas, compactas = _indice_familias(catalogo)
+    canonicas, compactas, palabras = _indice_familias(catalogo)
     for indice, forma in ((canonicas, forma_canonica(valor)), (compactas, forma_compacta(valor))):
         ids = indice.get(forma)
         if ids is not None:
@@ -539,6 +623,11 @@ def normalizar_familia(
     compacta = forma_compacta(valor)
     if not compacta:
         return None, "desconocida"
+    if len(compacta) > 60:  # nada del catálogo es tan largo: se evita el costo de difflib
+        return None, "desconocida"
+    ids = palabras.get(forma_canonica(valor))
+    if ids is not None and len(ids) == 1:
+        return next(iter(ids)), "aproximada"
     cercanas = difflib.get_close_matches(compacta, list(compactas), n=3, cutoff=_UMBRAL_DIFUSO)
     ids = {fid for c in cercanas for fid in compactas[c]}
     if len(ids) == 1:

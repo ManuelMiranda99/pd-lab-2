@@ -318,7 +318,7 @@ def test_nc15_familia_desconocida_se_descarta_y_se_completa():
     assert r.familias_completadas == ("abarrotes",)
 
 
-@pytest.mark.parametrize("item", ["abarrotes", None, 5, ["abarrotes", 1]])
+@pytest.mark.parametrize("item", [None, 5, ["abarrotes", 1]])
 def test_nc16_item_que_no_es_objeto(item):
     s = pred()
     s["familias"].append(item)

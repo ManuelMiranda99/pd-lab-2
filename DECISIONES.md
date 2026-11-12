@@ -38,13 +38,18 @@ el laboratorio van primero; luego las decisiones de stack y de operación.
   que no caben en un `integer` de PostgreSQL son inválidos. `"1,234"` se lee como miles (coma
   seguida de tres dígitos) y `"1.234.567"` también; `"1.234"` (un solo punto y tres decimales) es
   **ambiguo** —en Guatemala se usan ambos separadores—: en ventas no se guarda y se advierte, en
-  promoción se lee con punto decimal (los valores son pequeños) y se advierte.
+  promoción se lee como decimal (los valores son pequeños) y se advierte. En promoción `"2,500"`
+  es igual de ambiguo y se trata igual; en ventas `"1,292"` sigue siendo miles (así lo define E10).
+  Caracteres de ancho cero y el guion Unicode `−` se normalizan antes de leer números y fechas.
 - **Texto que no se puede codificar** (surrogates UTF-16 sueltos, `"\ud800"`, JSON válido): se
   reemplaza por `?` y se repara; nunca llega a la respuesta ni a Postgres (antes terminaba en 500).
 - **Plausibilidad contra el histórico:** el límite de "enorme" no es el tipo de Postgres sino el
   dominio de los datos. Ventas por encima de `5 × máximo histórico de la tienda y familia + 20` no
-  se guardan y se advierte; `en_promocion` por encima de `2 × máximo histórico de la familia + 5`
-  se acota a ese máximo y se advierte.
+  se guardan y se advierte (si era la corrección de un día ya observado, queda el valor anterior);
+  `en_promocion` por encima de `2 × máximo histórico de la familia + 5` se acota a ese límite (no
+  al máximo: así la regla es monótona) y se advierte. Medido con el histórico: el límite de ventas
+  más estricto es ~10.6× la mediana de su serie y el pico real más alto (licores, 31-dic) 7.8×,
+  así que un pico navideño con un cambio de demanda ×2 no se descarta.
 - **Última red:** cualquier excepción no prevista responde 503 con `detail` y queda en el log;
   nunca 500.
 - **Claves:** alias, mayúsculas, espacios y camelCase se reparan (`tienda` → `tienda_id`). Si la
@@ -70,7 +75,12 @@ el laboratorio van primero; luego las decisiones de stack y de operación.
   devuelven a la API para registrarlas en la BD, también las de cada ítem (con su ruta,
   `familias[0].comentario`).
 - **Mensajes acotados:** una lista de valores repetidos se resume después de 10 (`… (N en
-  total)`), para que un cuerpo enorme no infle la respuesta.
+  total)`), y una lista de más de 200 familias se rechaza (422): el catálogo tiene 12 y un cuerpo
+  así solo ocupa CPU de la API para las demás tiendas.
+- **Copias nulas:** si una clave llega repetida o con alias y una copia es nula
+  (`{"tienda_id": null, "tienda": 7}`), cuenta la que trae valor. Si falta `tienda_id` o `fecha`,
+  el 422 nombra las claves que llegaron y no se reconocieron. Los alias son una lista amplia
+  (español e inglés); `nombre` **no** es alias de familia (suele ser un campo descriptivo).
 
 ### 1.3 Decisiones sobre casos discutibles
 - **E05 (faltan familias en la predicción):** se predicen **todas** las familias del catálogo; las
@@ -92,15 +102,20 @@ el laboratorio van primero; luego las decisiones de stack y de operación.
   de evaluación del reentrenamiento hasta esa fecha y podía congelar las promociones futuras; el
   entrenamiento además ignora esas filas (defensa en profundidad, `features/panel.py`).
 - **Observación de un día del histórico publicado:** se guarda (gana sobre el histórico, §5.8) y
-  se **advierte** que reemplaza al dato publicado.
-- **Fecha con hora y zona horaria:** con `-06:00` (hora de Guatemala) o a medianoche UTC
-  (`T00:00:00Z`, la forma habitual de serializar "solo el día") la lectura es inequívoca y se
-  repara. Con otra zona se usa el día escrito **sin convertir** y se advierte (convertir
-  `T00:00:00Z` a hora local daría el día anterior, que casi nunca es lo que se quiso decir).
+  queda registrado en `correcciones`, **sin** observación en `calidad`: el ejemplo del Anexo
+  (2025-11-17, dentro del histórico) debe seguir respondiendo `ok`.
+- **Fecha con hora y zona horaria:** se calcula el día en Guatemala (UTC−6, sin horario de
+  verano). Si coincide con el día escrito (`T12:00:00Z`, `T23:00:00-06:00`) o es medianoche UTC
+  (`T00:00:00Z`, la forma habitual de serializar "solo el día"), se repara. Si cae en otro día
+  (`T03:00:00Z` = 21:00 del día anterior): en predicción se usa el día escrito y se advierte; en
+  observaciones se rechaza (422), por la misma razón que la fecha ambigua.
 - **Un solo ítem sin lista o un ítem como texto JSON:** se reparan (`"familias": {"familia_id":
   …}` es una lista de un ítem; un ítem `"{\"familia_id\": …}"` se decodifica).
-- **Familia aproximada (`lacteo`, `mascota`):** si una sola familia tiene similitud ≥ 0.8 se usa y
-  se advierte; si no hay o hay varias candidatas, se descarta el ítem y se advierte.
+- **Familia aproximada (`lacteo`, `mascota`, `frutas`):** si una sola familia tiene similitud ≥ 0.8
+  o la palabra es completa de un solo nombre, en **predicción** se usa y se advierte (una
+  coincidencia exacta repetida tiene prioridad); en **observaciones no se guarda** y se advierte
+  (`beb` puede ser bebé o bebidas: sería guardar ventas en una familia adivinada). Si no hay o hay
+  varias candidatas, se descarta el ítem y se advierte.
 - **E08 / E10 (`"50,5"`):** ventas negativas o con decimales no se guardan: no se puede saber la
   venta real (una devolución no es una venta negativa del día).
 - **E09 (reenvío idéntico):** no es un problema de limpieza: la BD hace upsert idempotente y la
@@ -134,7 +149,8 @@ el laboratorio van primero; luego las decisiones de stack y de operación.
 | `TIENDA_ILEGIBLE` | Id de tienda no interpretable (booleano, lista, `5.5`, texto) | rechazar | 422 |  |
 | `TIENDA_INEXISTENTE` | Tienda que no está en el catálogo | rechazar | 422 |  |
 | `FECHA_FORMATO` | Fecha en otro formato inequívoco (hora, `/`, `AAAAMMDD`, D/M) | reparar | se usa AAAA-MM-DD | E04 `17/11/2025`, `…T00:00:00` |
-| `FECHA_ZONA` | Fecha con hora y zona horaria (`…T01:00:00+00:00`) | advertir | se usa el día escrito, sin convertir la zona horaria |  |
+| `FECHA_ZONA` | Predicción: fecha con hora y zona horaria cuyo día en Guatemala (UTC−6) no es el escrito (`…T03:00:00Z`) | advertir | se usa el día escrito, sin convertir la zona horaria |  |
+| `FECHA_ZONA_OBS` | Observación: fecha con hora y zona horaria cuyo día en Guatemala no es el escrito | rechazar | 422 |  |
 | `FECHA_AMBIGUA` | Predicción: fecha D/M/AAAA con día y mes ≤ 12 (`05/06/2026`) | advertir | se interpreta como DD/MM/AAAA |  |
 | `FECHA_AMBIGUA_OBS` | Observación: fecha D/M/AAAA con día y mes ≤ 12 (guardar ventas reales en el día equivocado sería inventar datos) | rechazar | 422 |  |
 | `FECHA_FALTANTE` | Falta `fecha` o es nula | rechazar | 422 |  |
@@ -143,15 +159,18 @@ el laboratorio van primero; luego las decisiones de stack y de operación.
 | `FECHA_ANTES_APERTURA` | Fecha anterior a la apertura de la tienda | rechazar | 422 |  |
 | `FECHA_FUERA_COBERTURA` | Predicción: fecha posterior al último día de `feriados.csv` | advertir | se responde sin información de feriados para ese día |  |
 | `FECHA_FUERA_COBERTURA_OBS` | Observación: fecha posterior al último día de `feriados.csv` (el periodo de operación está cubierto por ese archivo; una venta real posterior es un error de fecha) | rechazar | 422 |  |
-| `OBSERVACION_EN_HISTORICO` | Observación de un día que ya está en el histórico publicado | advertir | se guarda y reemplaza al dato publicado en el panel (§5.8) |  |
+| `OBSERVACION_EN_HISTORICO` | Observación de un día que ya está en el histórico publicado | ignorar | se guarda y reemplaza al dato publicado en el panel (§5.8); queda en `correcciones` |  |
 | `LISTA_COMO_OBJETO` | Lista de familias enviada como objeto `{familia: valor}` | reparar | se convierte en lista |  |
 | `LISTA_DUPLICADA` | Lista de familias repetida (o con alias) con contenido distinto | rechazar | 422 |  |
 | `SIN_FAMILIAS` | Lista de familias ausente, vacía o sin familias reconocibles | rechazar | 422 |  |
 | `LISTA_UN_ITEM` | Lista de familias enviada como un solo ítem (objeto con `familia_id`) | reparar | se trata como una lista de un ítem |  |
+| `LISTA_GRANDE` | Lista de familias con más de 200 ítems (el catálogo tiene 12) | rechazar | 422 |  |
+| `ITEM_SOLO_FAMILIA` | Ítem que es solo el texto de una familia (`["abarrotes", …]`) | reparar | se interpreta como `{"familia_id": …}` |  |
 | `ITEM_COMO_TEXTO` | Ítem de la lista enviado como texto JSON (`"{\"familia_id\": …}"`) | reparar | se decodifica el ítem |  |
 | `ITEM_INVALIDO` | Ítem de la lista que no es un objeto | advertir | se descarta el ítem |  |
 | `FAMILIA_FORMATO` | Familia escrita de otra forma (mayúsculas, acentos, nombre) | reparar | se usa el id del catálogo | E02 `LÁCTEOS`, `Frutas y Verduras` |
-| `FAMILIA_APROXIMADA` | Familia con coincidencia aproximada única (`lacteo`) | advertir | se usa la familia más cercana |  |
+| `FAMILIA_APROXIMADA` | Predicción: familia con coincidencia aproximada única (`lacteo`, `frutas`) | advertir | se usa la familia más cercana (una coincidencia exacta repetida tiene prioridad) |  |
+| `FAMILIA_APROXIMADA_OBS` | Observación: familia con coincidencia aproximada (`beb`: ¿bebé o bebidas?) | advertir | no se guarda esa familia (guardar ventas en una familia adivinada sería inventar datos) |  |
 | `FAMILIA_DESCONOCIDA` | Familia desconocida, nula o ausente en el ítem | advertir | se descarta el ítem |  |
 | `FAMILIA_REPETIDA_IGUAL` | Familia repetida con los mismos valores | reparar | se conserva una |  |
 | `FAMILIA_REPETIDA_PRED` | Predicción: familia repetida con valores distintos | advertir | se usa la última aparición | E06 |
@@ -162,8 +181,8 @@ el laboratorio van primero; luego las decisiones de stack y de operación.
 | `PROMOCION_FALTANTE` | Falta `en_promocion` o es nulo | advertir | se usa 0 |  |
 | `PROMOCION_DECIMAL` | `en_promocion` con decimales (`2.5`) | advertir | se redondea al entero más cercano (mitades hacia arriba) |  |
 | `PROMOCION_INVALIDA` | `en_promocion` negativo, booleano, no numérico, NaN/Infinity o enorme | advertir | se usa 0 |  |
-| `PROMOCION_AMBIGUA` | `en_promocion` con punto y tres decimales (`"1.000"`: ¿uno o mil?) | advertir | se lee con punto decimal (los valores de promoción son pequeños) |  |
-| `PROMOCION_ATIPICA` | `en_promocion` muy por encima del máximo histórico de la familia | advertir | se usa el máximo histórico de la familia |  |
+| `PROMOCION_AMBIGUA` | `en_promocion` con un separador y tres decimales (`"1.000"`, `"2,500"`) | advertir | se lee como decimal y se redondea (los valores de promoción son pequeños) |  |
+| `PROMOCION_ATIPICA` | `en_promocion` muy por encima del máximo histórico de la familia | advertir | se acota al límite (`2 × máximo histórico + 5`) |  |
 | `VENTAS_NEGATIVAS` | Ventas negativas (devoluciones) | advertir | no se guarda esa familia | E08 `-4` |
 | `VENTAS_DECIMAL` | Ventas con decimales (`"50,5"`) | advertir | no se guarda esa familia |  |
 | `VENTAS_INVALIDAS` | Ventas ausentes, nulas, booleanas, no numéricas, NaN/Infinity o enormes | advertir | no se guarda esa familia |  |
@@ -294,7 +313,11 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
 - **Decisión:** el DAG evalúa los dos modelos sobre los **mismos días**: los días con observación
   posteriores al corte de entrenamiento del vigente (los últimos 21 como máximo), en ventanas
   **completas** de 7 días contadas desde el final; el resto más antiguo (1–6 días) se descarta,
-  porque una ventana corta pesaría igual que una completa en el conteo de ventanas ganadas. El
+  porque una ventana corta pesaría igual que una completa en el conteo de ventanas ganadas. Un
+  día cuenta si está **completo** (al menos la mitad de las filas del día más completo): un día
+  con una sola tienda observada se usa para entrenar, pero no para decidir. Si ya se evaluó un
+  retador con los mismos datos (`datos_entrenamiento_sha256`) contra el mismo vigente, no se
+  vuelve a entrenar: el resultado sería el mismo. El
   baseline guarda también su corte (`fecha_corte`): si el vigente es el baseline del arranque, se
   compara solo en días que no vio.
   - **Vigente:** se usa tal cual, sin reentrenar. Predice cada día `D` con variables construidas
@@ -316,7 +339,9 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
 - **Decisión:** el retador se promueve (se mueve el alias `champion`) solo si se cumplen **todas**:
   1. hay al menos 14 días evaluables después del corte del vigente (dos ventanas completas: con
      una sola, la regla de mayoría se cumpliría con una ventana que puede ser ruido). Si no los
-     hay, el DAG **no entrena**: el resultado ya se sabe;
+     hay, el DAG **no entrena**: el resultado ya se sabe. *Costo aceptado:* tras una promoción,
+     la siguiente necesita 14 días nuevos, así que ante un cambio de demanda el modelo tarda al
+     menos dos semanas en adaptarse (los lags del vigente sí siguen el nivel desde el primer día);
   2. `costo_retador ≤ costo_vigente × (1 − 0.005)`, es decir, al menos 0.5 % de mejora en el total
      de las ventanas;
   3. el retador gana en al menos la mitad de las ventanas;
@@ -375,7 +400,12 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
   retador en MLflow (evidencia y linaje), pero solo se crea una **versión del Registry** cuando el
   criterio promueve. *Alternativa:* registrar siempre con el tag `promovido=False` (lo que se
   hacía antes); llenaba el Registry de perdedores y el bootstrap podía asignar el alias a uno de
-  ellos si el alias se perdía (ahora solo considera versiones con `promovido=True`).
+  ellos si el alias se perdía (ahora solo considera versiones con `promovido=True`). El tag se
+  pone **después** de mover el alias (`etapas.promover`): una versión registrada cuyo alias no se
+  llegó a mover no queda marcada como promovida.
+- **Corte del vigente posterior a los datos** (un modelo entrenado con una observación de fecha
+  absurda, antes de que se rechazaran): se trata como desconocido, para no congelar el
+  reentrenamiento para siempre.
 - **Linaje en MLflow:** cada reentreno deja dos runs con el mismo id: `baseline-<id>` (rol
   `referencia`, costo del baseline en las mismas ventanas) y `<modelo>-<id>` (rol `retador`):
   hiperparámetros, `datos_sha256`, rango de fechas, filas, observaciones, corte, ventanas,
@@ -621,7 +651,10 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
   `confirmar` (escribe `exitoso` con la versión que tiene el alias al terminar). `cerrar`
   (`all_done`) corre siempre: si la fila sigue `en_curso`, la cierra como `fallido` con la etapa
   y el error, o como `exitoso` si el alias ya se había movido. `fin` (vacía, tras `confirmar`)
-  deja el dag run en `failed` cuando falla una etapa. Ninguna tarea tiene reintentos.
+  deja el dag run en `failed` cuando falla una etapa. Ninguna tarea tiene reintentos configurados;
+  aun así, si el scheduler se reinicia con una tarea en curso, Airflow 3 la reasigna (segundo
+  intento). Es seguro: cada etapa verifica que la ejecución siga `en_curso` y el orden de escritura
+  no cambia; la ejecución solo tarda más.
 - **Alternativas:** una sola tarea que hace todo (Fase 1); pasar el panel o el modelo entre
   tareas por XCom o por disco; `on_failure_callback` en vez de una tarea final; mover el alias
   antes de escribir el resultado.

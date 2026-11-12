@@ -226,12 +226,13 @@ def test_observaciones_idempotentes_e_historial(cliente, url):
     assert primera.status_code == 200, primera.text
     assert ObservacionesResponse(**primera.json()).registros_guardados == 3
 
-    # E09: reenvío idéntico → 0. D está dentro del histórico sintético: la única observación es el
-    # aviso de que la observación reemplaza al dato publicado (fuera del histórico sería `ok`).
+    # E09: reenvío idéntico → 0 y estado ok (que D esté dentro del histórico sintético solo queda
+    # registrado en `correcciones`, no en `calidad`).
     repetida = cliente.post("/v1/observaciones", json=_obs(D, {f: 100 for f in FAMILIAS}))
-    assert repetida.json()["registros_guardados"] == 0
-    assert [o["campo"] for o in repetida.json()["calidad"]["observaciones"]] == ["fecha"]
-    assert "histórico publicado" in repetida.json()["calidad"]["observaciones"][0]["detalle"]
+    assert repetida.json() == {
+        "registros_guardados": 0,
+        "calidad": {"estado": "ok", "observaciones": []},
+    }
 
     # Corrección de una familia: solo esa cuenta y queda el valor anterior en el historial.
     cambio = cliente.post("/v1/observaciones", json=_obs(D, {"abarrotes": 120}))

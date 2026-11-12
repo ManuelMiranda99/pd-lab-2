@@ -32,14 +32,25 @@ from novamercado.modelo.metricas import costo_total, metricas_tecnicas
 
 DIAS_MAX_EVALUACION = 21
 LARGO_VENTANA = 7
+#: Un día evaluable necesita al menos esta fracción de las filas del día más completo.
+FRACCION_DIA_COMPLETO = 0.5
 
 
 def ventanas_evaluacion(
     fechas: list[pd.Timestamp] | pd.Series, corte: pd.Timestamp | None
 ) -> list[list[pd.Timestamp]]:
     """Días con dato `>= corte` (todos si no hay corte), los últimos 21, en bloques completos de 7
-    contados desde el final (el resto más antiguo, de menos de 7 días, se descarta)."""
-    dias = sorted(pd.to_datetime(pd.Series(list(fechas))).drop_duplicates())
+    contados desde el final (el resto más antiguo, de menos de 7 días, se descarta).
+
+    Si `fechas` trae una fila por (tienda, familia), solo cuentan los días **completos**: con al
+    menos la mitad de las filas del día más completo. Un día con una sola tienda observada no
+    pesa igual que uno con las diez en la regla de mayoría de ventanas (sí se usa para entrenar).
+    """
+    serie = pd.to_datetime(pd.Series(list(fechas)))
+    conteo = serie.value_counts()
+    if not conteo.empty:
+        conteo = conteo[conteo >= FRACCION_DIA_COMPLETO * conteo.max()]
+    dias = sorted(conteo.index)
     if corte is not None:
         dias = [d for d in dias if d >= corte]
     dias = dias[-DIAS_MAX_EVALUACION:]

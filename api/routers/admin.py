@@ -43,6 +43,12 @@ def reentrenar(servicio: ServicioDep) -> JSONResponse:
     )
 
 
+@router.post("/reentrenar/", status_code=202, include_in_schema=False)
+def reentrenar_con_barra(servicio: ServicioDep) -> JSONResponse:
+    """Misma operación con barra final (una ruta GET con barra impide la redirección)."""
+    return reentrenar(servicio)
+
+
 @router.get("/reentrenar/", include_in_schema=False)
 def estado_sin_id() -> JSONResponse:
     """Id vacío: no existe esa ejecución (404, en vez de la redirección a la ruta del POST)."""
