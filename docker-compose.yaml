@@ -103,6 +103,8 @@ services:
       <<: *producto-env
       DATOS_RUTA: /datos
       ESPERA_MLFLOW_SEGUNDOS: "300"
+      # Solo simulador/smoke (vacío = histórico completo). Ver README y scripts/simulador.py.
+      HISTORICO_HASTA: ${HISTORICO_HASTA:-}
     volumes:
       - ${DATOS_DIR:-./data}:/datos:ro
     depends_on:

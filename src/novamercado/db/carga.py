@@ -2,6 +2,10 @@
 
 La carga es idempotente: ocurre en **una** transacción que termina escribiendo el marcador
 `carga_datos` (sha256 de los archivos + filas). Si el marcador existe, no se vuelve a cargar.
+
+Modo simulación (`HISTORICO_HASTA`, solo para el simulador y el smoke): se cargan únicamente las
+filas del histórico con `fecha <= hasta`; el corte entra en la huella. En la evaluación la
+variable queda vacía y se carga todo.
 """
 
 from __future__ import annotations
@@ -10,6 +14,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -63,12 +68,14 @@ def localizar_archivos(raiz: Path) -> dict[str, Path]:
     return encontrados
 
 
-def huella(archivos: dict[str, Path]) -> str:
-    """sha256 del contenido de los archivos requeridos, en orden fijo."""
+def huella(archivos: dict[str, Path], hasta: date | None = None) -> str:
+    """sha256 del contenido de los archivos requeridos, en orden fijo (y del corte, si hay)."""
     h = hashlib.sha256()
     for nombre in ARCHIVOS_REQUERIDOS:
         h.update(nombre.encode())
         h.update(archivos[nombre].read_bytes())
+    if hasta is not None:
+        h.update(f"historico_hasta={hasta.isoformat()}".encode())
     return h.hexdigest()
 
 
@@ -79,8 +86,10 @@ def _leer(ruta: Path) -> pd.DataFrame:
     return df.apply(lambda s: s.str.strip())
 
 
-def leer_publicados(archivos: dict[str, Path]) -> dict[str, pd.DataFrame]:
-    """Lee y tipa los CSV publicados."""
+def leer_publicados(
+    archivos: dict[str, Path], hasta: date | None = None
+) -> dict[str, pd.DataFrame]:
+    """Lee y tipa los CSV publicados (el histórico, solo hasta `hasta` inclusive si se indica)."""
     tiendas = _leer(archivos["tiendas.csv"])
     tiendas["tienda_id"] = tiendas["tienda_id"].astype(int)
     familias = _leer(archivos["familias.csv"])
@@ -96,6 +105,8 @@ def leer_publicados(archivos: dict[str, Path]) -> dict[str, pd.DataFrame]:
     historico["tienda_id"] = historico["tienda_id"].astype(int)
     historico["ventas"] = historico["ventas"].astype(float).round().astype(int)
     historico["en_promocion"] = historico["en_promocion"].astype(float).round().astype(int)
+    if hasta is not None:
+        historico = historico[pd.to_datetime(historico["fecha"]).dt.date <= hasta]
     return {
         "tiendas": tiendas[
             ["tienda_id", "nombre", "ciudad", "departamento", "tipo", "fecha_apertura"]
@@ -121,10 +132,15 @@ def marcador(conn: psycopg.Connection) -> tuple[str, dict[str, int]] | None:
     return (fila[0], fila[1]) if fila else None
 
 
-def cargar_datos(conn: psycopg.Connection, raiz: Path) -> ResultadoCarga:
-    """Carga los CSV si todavía no hay marcador. Todo o nada (una transacción)."""
+def cargar_datos(
+    conn: psycopg.Connection, raiz: Path, *, hasta: date | None = None
+) -> ResultadoCarga:
+    """Carga los CSV si todavía no hay marcador. Todo o nada (una transacción).
+
+    `hasta` (modo simulación) recorta el histórico a `fecha <= hasta`.
+    """
     archivos = localizar_archivos(raiz)
-    sha = huella(archivos)
+    sha = huella(archivos, hasta)
     existente = marcador(conn)
     conn.commit()
     if existente is not None:
@@ -139,7 +155,9 @@ def cargar_datos(conn: psycopg.Connection, raiz: Path) -> ResultadoCarga:
             )
         return ResultadoCarga(False, sha_previo, dict(filas_previas))
 
-    tablas = leer_publicados(archivos)
+    tablas = leer_publicados(archivos, hasta)
+    if hasta is not None and tablas["historico_ventas"].empty:
+        raise ValueError(f"HISTORICO_HASTA={hasta} deja el histórico vacío")
     filas = {nombre: len(df) for nombre, df in tablas.items()}
     with conn.transaction():
         # Bloqueo de la fila-marcador: si otro proceso cargó mientras leíamos, no se duplica.

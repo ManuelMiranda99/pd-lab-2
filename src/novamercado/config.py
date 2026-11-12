@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 # El cliente de MLflow lee estas variables en cada llamada: sin reintentos largos ni esperas de
@@ -19,6 +20,17 @@ os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")
 def _entero(nombre: str, defecto: int) -> int:
     valor = os.environ.get(nombre, "").strip()
     return int(valor) if valor else defecto
+
+
+def _fecha(nombre: str) -> date | None:
+    """Fecha ISO opcional (vacía → None). Un valor ilegible es un error de configuración."""
+    valor = os.environ.get(nombre, "").strip()
+    if not valor:
+        return None
+    try:
+        return date.fromisoformat(valor)
+    except ValueError as exc:
+        raise ValueError(f"{nombre}={valor!r} no es una fecha AAAA-MM-DD") from exc
 
 
 def _decimal(nombre: str, defecto: float) -> float:
@@ -45,6 +57,8 @@ class Config:
     dag_id: str = "reentrenamiento"
     mejora_minima: float = 0.005  # DECISIONES §4.2
     espera_mlflow_segundos: int = 180
+    # Solo simulador/smoke: carga el histórico hasta esta fecha inclusive (None = todo).
+    historico_hasta: date | None = None
 
     @classmethod
     def desde_entorno(cls) -> Config:
@@ -65,4 +79,5 @@ class Config:
             dag_id=e("AIRFLOW_DAG_ID", cls.dag_id),
             mejora_minima=_decimal("CRITERIO_MEJORA_MINIMA", cls.mejora_minima),
             espera_mlflow_segundos=_entero("ESPERA_MLFLOW_SEGUNDOS", cls.espera_mlflow_segundos),
+            historico_hasta=_fecha("HISTORICO_HASTA"),
         )

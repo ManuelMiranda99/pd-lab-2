@@ -287,3 +287,59 @@ Toda la fase en una pasada, en la rama `feat/reentrenamiento` → PR #10 (squash
 ### Próxima sesión
 - Empezar por: **Fase 7** — F7.1 `scripts/smoke.py`
   (puede reutilizar el envío de solicitudes/observaciones usado hoy) y F7.3 simulador sin fuga.
+
+---
+
+## Sesión 2026-11-11 — Fase 7 (inicio)
+**Fase:** 7 — Simulador, smoke y pruebas end-to-end
+**Estado al cerrar:** Fase 7 cerrada ✅ (7 de 7) · cierre el 2026-11-12
+**Plan del día:** recrear volúmenes locales (quitar observaciones de prueba y v7), F7.1, F7.3, F7.4, F7.5
+
+Toda la fase en la rama `feat/smoke-simulador` → PR #12 (squash, CI verde con `smoke`).
+
+### Logrado
+- Arranque en frío tras recrear los volúmenes: `/health` en `ok` a los 84 s con v1 (`up -d` solo
+  devuelve el control a los ~20 s; el bootstrap sigue entrenando).
+- F7.1 `scripts/smoke.py` (22 comprobaciones) sobre `scripts/comun_e2e.py` (cliente, validación de
+  cada respuesta con los modelos Pydantic del contrato, `Compose` que rechaza `-v`, mutadores).
+  Con datos sintéticos: 22/22, reentreno en 48 s.
+- F7.2 Job `smoke` en la CI: datos sintéticos (`python -m novamercado.sintetico`), `compose up` con
+  `.env.example` sin editar y `smoke.py --mlflow`. Corre en `main`, tags `entrega-*`, a mano y en
+  PRs con la etiqueta `smoke`. Primer intento falló por `runner.temp` en el `env` del job (no existe
+  ahí); se exporta desde un paso.
+- F7.3 `scripts/simulador.py`: `HISTORICO_HASTA` (config, carga y huella) para arrancar con el
+  histórico truncado; verifica en MLflow que el modelo inicial no vio datos posteriores al corte.
+  Ciclo diario observar → predecir con errores inyectados (equivalentes, sucios, rechazos) y
+  solicitudes repetidas.
+- F7.4/F7.5 Escenarios con reporte en `evidencia/simulacion/`:
+  - Hueco de 4 semanas, nov–feb, choque +20 %, reentreno cada 14 días, MLflow caído y `down`/`up`:
+    costo 352 937 vs baseline 523 125 (**−32.5 %**); v4 y v7 promovidas y en uso en ≤ 4 s;
+    `degradado` en 1 s y `ok` 6 s tras el `start`; `down`/`up` en 28 s conservando modelo y datos;
+    0 problemas de contrato, 0 fallas, p50 de predicción 134 ms.
+  - Choque −20 % sin hueco, reentreno semanal: **−22.8 %** (febrero −11.6 %); 0 fallas.
+- F7.6 Ensayo desde una copia limpia con `build --no-cache`: build 49 s (imágenes base ya
+  descargadas), `ok` a los 145 s del `up`, ~1.8 GB de RAM.
+- F7.7 Corregido: primera simulación con fuga (imágenes viejas sin `HISTORICO_HASTA` → −43.6 %
+  falso), mutadores mal clasificados (`20260101` es reparable; claves extra/orden dejan `ok`),
+  `date` no serializable en el reporte y una ruta personal en la configuración del reporte.
+
+### Verificación
+- pytest: 933 pasan y 1 se omite con Postgres; 893 pasan y 41 se omiten sin BD. ruff limpio.
+- CI del PR #12: `lint-y-pruebas`, `compose`, `dags` y `smoke` en verde.
+- Volúmenes de los proyectos de prueba (`novamercado-e2e`, `-sim*`, `-ensayo`) borrados; stack
+  principal de vuelta con v1, 0 observaciones y 0 solicitudes.
+
+### Decisiones tomadas
+- Histórico truncado solo para simulación y proyecto de Compose aparte → DECISIONES.md §5.12.
+
+### Pendientes / bloqueos
+- Riesgo: tras un choque de demanda, la promoción tarda 1–2 semanas (exige ganar ≥ 0.5 % y la mitad
+  de las ventanas). No se cambió el criterio.
+- Docker local tiene ~9.8 GB reclamables de volúmenes de otros proyectos (no tocados).
+
+### Próxima sesión
+- Empezar por: **Fase 8** — F8.1 revisar `README.md` contra el checklist del evaluador.
+- Luego: F8.4 evidencia (MLflow, DAG con promoción y no-promoción, respuestas E01–E10), F8.5
+  auditoría de datos y credenciales, F8.2/F8.3.
+- Tener en cuenta: el tag `entrega-lab2` (F8.8) antes de la fecha límite; el job `smoke` corre en el
+  tag.

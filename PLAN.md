@@ -301,18 +301,19 @@ observaciones de calidad" o en un rechazo con motivo.
 ## Fase 7 — Simulador, smoke y pruebas end-to-end
 **Objetivo:** reproducir lo que hará el evaluador antes de que lo haga.
 
-- [ ] F7.1 `scripts/smoke.py`: health ≤ 10 min, contrato, E01 sintético, 422, idempotencia, reentreno
+- [x] F7.1 `scripts/smoke.py`: health ≤ 10 min, contrato, E01 sintético, 422, idempotencia, reentreno
       ≤ 10 min, id inventado → 404, `stop/start mlflow`.
-- [ ] F7.2 Job `smoke` en CI con datos **sintéticos** (en main, tag y PRs con etiqueta; luego requerido).
-- [ ] F7.3 `scripts/simulador.py` sin fuga: bootstrap con **histórico truncado** (variable de entorno)
+- [x] F7.2 Job `smoke` en CI con datos **sintéticos** (en main, tag y PRs con etiqueta; luego requerido).
+      _(verde en el PR de la fase; requerido en `main` — se omite en PRs sin etiqueta)_
+- [x] F7.3 `scripts/simulador.py` sin fuga: bootstrap con **histórico truncado** (variable de entorno)
       y simular los días retenidos: observaciones de ayer → solicitudes de hoy de 10 tiendas, errores
       aleatorios (catálogo + inventados), solicitudes repetidas.
-- [ ] F7.4 Escenarios: hueco de varias semanas antes de la primera solicitud; choque de nivel ±20 %;
+- [x] F7.4 Escenarios: hueco de varias semanas antes de la primera solicitud; choque de nivel ±20 %;
       reentrenos periódicos; `stop mlflow` a mitad; `down`/`up` sin `-v` a mitad.
-- [ ] F7.5 Validar cada respuesta contra el contrato; costo total vs baseline; reporte en `evidencia/`.
-- [ ] F7.6 Ensayo desde cero en carpeta nueva (clon limpio + datos como vengan del GES), cronometrado;
+- [x] F7.5 Validar cada respuesta contra el contrato; costo total vs baseline; reporte en `evidencia/`.
+- [x] F7.6 Ensayo desde cero en carpeta nueva (clon limpio + datos como vengan del GES), cronometrado;
       Docker con la RAM que pide el README.
-- [ ] F7.7 Corregir lo que falle.
+- [x] F7.7 Corregir lo que falle.
 
 ---
 

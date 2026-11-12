@@ -447,6 +447,20 @@ HGB Poisson con cuantil cuesta **−42.3 %** frente al mejor baseline (310 576).
   mismos datos que cargó el bootstrap. Guardar antes de responder evita que una respuesta exista
   sin su registro.
 
+### 5.12 Pruebas de punta a punta: histórico truncado y proyecto de Compose aparte
+- **Decisión:** el simulador reproduce la operación sin fuga cargando el histórico solo hasta un
+  corte (`HISTORICO_HASTA`, variable del bootstrap, vacía por defecto) y enviando los días retenidos
+  como lo haría el evaluador: observaciones de `D-1` antes de las predicciones de `D`. El corte entra
+  en la huella de la carga. El smoke y el simulador corren en un proyecto de Compose propio (`-p`)
+  con volúmenes nuevos; nunca borran volúmenes. En la CI el smoke usa datos **sintéticos**
+  (`python -m novamercado.sintetico`), nunca los publicados.
+- **Alternativas:** un endpoint de administración para recortar datos; montar CSV recortados en otra
+  carpeta; correr el simulador contra el stack de entrega.
+- **Justificación:** con la misma imagen y el mismo código se prueba exactamente el camino del
+  evaluador; la variable solo afecta la primera carga de un volumen nuevo y no deja ninguna puerta en
+  la API. Separar el proyecto evita mezclar observaciones de prueba con las del stack entregado
+  (lo que pasó en la Fase 6).
+
 ## 6. Reglas operativas
 
 ### 6.1 `POST /admin/reentrenar` con una ejecución en curso → 202 con el id de esa ejecución

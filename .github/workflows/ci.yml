@@ -2,8 +2,12 @@ name: ci
 
 on:
   pull_request:
+    # `labeled`: poner la etiqueta `smoke` a un PR dispara también el job de punta a punta.
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main]
+    tags: ["entrega-*"]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -140,3 +144,55 @@ jobs:
 
       - name: Build de las imágenes
         run: docker compose build
+
+  # De punta a punta con datos SINTÉTICOS (nunca los publicados): levanta el stack completo y
+  # corre scripts/smoke.py (contrato, 422, idempotencia, reentreno, caída de MLflow).
+  # Corre en main, en los tags de entrega, a mano y en PRs con la etiqueta `smoke`.
+  smoke:
+    name: smoke
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'smoke')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      # `runner.temp` no existe en el `env` del job: la ruta se exporta desde un paso.
+      - name: Carpeta de datos
+        run: echo "DATOS_DIR=$RUNNER_TEMP/datos-sinteticos" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Instalar el paquete (cliente del smoke y generador de datos)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -e .
+
+      - name: Datos sintéticos
+        run: python -m novamercado.sintetico "$DATOS_DIR"
+
+      - name: Levantar el stack (con .env.example sin editar)
+        run: |
+          cp .env.example .env
+          export AIRFLOW_UID=$(id -u)
+          docker compose build
+          docker compose up -d
+
+      - name: Smoke
+        run: PYTHONPATH=src python scripts/smoke.py --mlflow --salida smoke.json
+
+      - name: Logs si falla
+        if: failure()
+        run: docker compose ps -a && docker compose logs --tail 150
+
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: smoke
+          path: smoke.json
+          if-no-files-found: ignore

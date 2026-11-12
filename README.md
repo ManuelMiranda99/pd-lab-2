@@ -46,3 +46,27 @@ pip install -r requirements-dev.txt -e .
 ruff check . && ruff format --check .
 pytest -q
 ```
+
+## Pruebas de punta a punta (smoke y simulador)
+
+Escriben en la BD (observaciones, reentrenos): se corren en un **proyecto de Compose aparte**
+(`-p`), con volúmenes propios, nunca contra el stack que se entrega. Comparten los puertos, así que
+primero `docker compose stop` del principal (conserva sus volúmenes).
+
+```bash
+# Smoke con datos sintéticos (lo mismo que el job `smoke` de la CI)
+python -m novamercado.sintetico /tmp/datos-sinteticos
+DATOS_DIR=/tmp/datos-sinteticos docker compose -p novamercado-e2e up -d
+PYTHONPATH=src python scripts/smoke.py --mlflow --proyecto novamercado-e2e
+
+# Simulador sin fuga con los datos reales: carga el histórico hasta --corte (HISTORICO_HASTA)
+# y simula los días retenidos con errores, choque de demanda, reentrenos, caída de MLflow y down/up
+PYTHONPATH=src python scripts/simulador.py --levantar --proyecto novamercado-sim \
+  --corte 2025-10-31 --inicio 2025-11-28 --fin 2026-02-28 --choque 1.2 --choque-desde 2026-02-01 \
+  --reentrenar-cada 14 --caida-mlflow 2026-01-10 --reinicio 2026-01-24
+```
+
+El reporte queda en `evidencia/simulacion/`. `HISTORICO_HASTA` solo sirve para la primera carga de
+un volumen nuevo y debe quedar vacío en la evaluación. Los scripts nunca borran volúmenes: para
+repetir una corrida, usar otro `--proyecto` o borrar ese proyecto a mano
+(`docker compose -p <proyecto> down -v`).

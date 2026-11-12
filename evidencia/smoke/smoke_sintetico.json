@@ -1,0 +1,127 @@
+{
+  "ok": true,
+  "segundos": 135.7,
+  "pruebas": [
+    {
+      "prueba": "health ok ≤ 10 min",
+      "ok": true,
+      "detalle": "75 s"
+    },
+    {
+      "prueba": "GET /modelo",
+      "ok": true,
+      "detalle": "{\"nombre\": \"novamercado\", \"alias\": \"champion\", \"version\": \"1\"}"
+    },
+    {
+      "prueba": "predicción válida",
+      "ok": true,
+      "detalle": "200 en 180 ms, versión '1'"
+    },
+    {
+      "prueba": "E01 tienda 'T0N' → corregido, mismas predicciones",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "prueba": "422 tienda inexistente",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "prueba": "422 fecha imposible",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "prueba": "422 sin tienda",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "prueba": "422 cuerpo vacio",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "prueba": "422 cuerpo json_roto",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "prueba": "422 cuerpo lista",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "prueba": "422 cuerpo null",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "prueba": "422 cuerpo texto_plano",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "prueba": "422 cuerpo binario",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "prueba": "observaciones idempotentes",
+      "ok": true,
+      "detalle": "primera 12, reenvío 0"
+    },
+    {
+      "prueba": "id inventado → 404",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "prueba": "POST /admin/reentrenar → 202",
+      "ok": true,
+      "detalle": "869ab2c5f75441af8117799326423fb8"
+    },
+    {
+      "prueba": "segundo POST con uno en curso → mismo id",
+      "ok": true,
+      "detalle": "869ab2c5f75441af8117799326423fb8"
+    },
+    {
+      "prueba": "reentreno termina ≤ 10 min",
+      "ok": true,
+      "detalle": "48 s → {\"estado\": \"exitoso\", \"promovido\": false, \"version\": \"1\", \"motivo\": \"Solo 1 días evaluables después del corte del vigente (mínimo 7): se conserva el vigente\"}"
+    },
+    {
+      "prueba": "MLflow caído → degradado < 1 min",
+      "ok": true,
+      "detalle": "0.0031850840023253113"
+    },
+    {
+      "prueba": "predicción con MLflow caído",
+      "ok": true,
+      "detalle": "180 ms"
+    },
+    {
+      "prueba": "MLflow de vuelta → ok < 2 min",
+      "ok": true,
+      "detalle": "9.10179083299954"
+    },
+    {
+      "prueba": "todas las respuestas cumplen el contrato",
+      "ok": true,
+      "detalle": ""
+    }
+  ],
+  "codigos": {
+    "estado_reentreno 200": 17,
+    "estado_reentreno 404": 1,
+    "health 200": 12,
+    "health 503": 15,
+    "modelo 200": 1,
+    "observaciones 200": 2,
+    "prediccion 200": 3,
+    "prediccion 422": 9,
+    "reentrenar 202": 2
+  }
+}
