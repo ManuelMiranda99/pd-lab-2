@@ -4,7 +4,7 @@ Generada con `scripts/evidencia.py` sobre un stack levantado desde cero con los 
 
 ## 1. Arranque en frío
 
-- {"segundos_hasta_ok": 65, "modelo": {"nombre": "novamercado", "alias": "champion", "version": "1"}, "health": {"estado": "ok", "componentes": {"base_de_datos": true, "mlflow": true, "airflow": true, "modelo": true}, "version_modelo": "1"}}
+- {"segundos_hasta_ok": 348, "modelo": {"nombre": "novamercado", "alias": "champion", "version": "1"}, "health": {"estado": "ok", "componentes": {"base_de_datos": true, "mlflow": true, "airflow": true, "modelo": true}, "version_modelo": "1"}}
 
 ## 2. Respuestas de la API (válidas y defectuosas)
 
@@ -338,47 +338,44 @@ Respuesta:
 
 ### Sin datos nuevos → no se promueve
 
-- `POST /admin/reentrenar` → 202 {"id": "7387a3fc05404976b06fd05aee37bb2c"}
+- `POST /admin/reentrenar` → 202 {"id": "f0d9efebe14a46e0a889d179e342846f"}
 - Modelo antes: {"nombre": "novamercado", "alias": "champion", "version": "1"}
-- `GET /admin/reentrenar/{id}` al terminar (24.3 s): {"estado": "exitoso", "promovido": false, "version": "1", "motivo": "Solo 0 días evaluables después del corte del vigente (mínimo 7): se conserva el vigente"}
+- `GET /admin/reentrenar/{id}` al terminar (12.5 s): {"estado": "exitoso", "promovido": false, "version": "1", "motivo": "Solo 0 días evaluables después del corte del vigente (mínimo 14): se conserva el vigente sin entrenar"}
 - Modelo después: {"nombre": "novamercado", "alias": "champion", "version": "1"}
 
 ### 14 días con demanda +25 % → se promueve
 
-- `POST /admin/reentrenar` → 202 {"id": "518816a0ce144b1ea91fa2c278ee6a81"}
+- `POST /admin/reentrenar` → 202 {"id": "2567920de8fa41f4b7fdf9041581d018"}
 - Modelo antes: {"nombre": "novamercado", "alias": "champion", "version": "1"}
-- `GET /admin/reentrenar/{id}` al terminar (39.4 s): {"estado": "exitoso", "promovido": true, "version": "3", "motivo": "Costo en validación 46 296 vs 47 167 del vigente (−1.8 %, gana 1/2 ventanas): promovido"}
-- Modelo después: {"nombre": "novamercado", "alias": "champion", "version": "3"}
-- Versión nueva en uso por la API (sin reinicio) a los 12.2 s de terminar
+- `GET /admin/reentrenar/{id}` al terminar (70.8 s): {"estado": "exitoso", "promovido": true, "version": "2", "motivo": "Costo en validación 46 296 vs 47 167 del vigente (−1.8 %, gana 1/2 ventanas): promovido"}
+- Modelo después: {"nombre": "novamercado", "alias": "champion", "version": "2"}
+- Versión nueva en uso por la API (sin reinicio) a los 4.0 s de terminar
 
 ## 4. Caída temporal de MLflow
 
 | Paso | HTTP | Respuesta | Segundos |
 |---|---|---|---|
-| GET /health tras stop mlflow | 200 | `{"estado": "degradado", "motivo": "No disponible: mlflow", "componentes": {"base_de_datos": true, "mlflow": false, "airflow": true, "modelo"` | 3.1 |
-| POST /v1/prediccion con MLflow caído | 200 | `{"tienda_id": 5, "fecha": "2026-03-01", "version_modelo": "3", "predicciones": [{"familia_id": "abarrotes", "venta_esperada": 1658.54, "cant` |  |
-| GET /modelo con MLflow caído | 200 | `{"nombre": "novamercado", "alias": "champion", "version": "3"}` |  |
+| GET /health tras stop mlflow | 200 | `{"estado": "degradado", "motivo": "No disponible: mlflow", "componentes": {"base_de_datos": true, "mlflow": false, "airflow": true, "modelo"` | 4.1 |
+| POST /v1/prediccion con MLflow caído | 200 | `{"tienda_id": 5, "fecha": "2026-03-01", "version_modelo": "2", "predicciones": [{"familia_id": "abarrotes", "venta_esperada": 1658.54, "cant` |  |
+| GET /modelo con MLflow caído | 200 | `{"nombre": "novamercado", "alias": "champion", "version": "2"}` |  |
 | POST /admin/reentrenar con MLflow caído | 503 | `{"detail": "MLflow no disponible: no se puede reentrenar"}` |  |
-| GET /health tras start mlflow | 200 | `{"estado": "ok", "componentes": {"base_de_datos": true, "mlflow": true, "airflow": true, "modelo": true}, "version_modelo": "3"}` | 9.1 |
+| GET /health tras start mlflow | 200 | `{"estado": "ok", "componentes": {"base_de_datos": true, "mlflow": true, "airflow": true, "modelo": true}, "version_modelo": "2"}` | 10.1 |
 
 ## 5. MLflow: experimentos, runs y versiones
 
-Modelo registrado `novamercado`, alias: [{"alias": "champion", "version": "3"}]. Detalle en [`mlflow/mlflow.json`](mlflow/mlflow.json).
+Modelo registrado `novamercado`, alias: [{"alias": "champion", "version": "2"}]. Detalle en [`mlflow/mlflow.json`](mlflow/mlflow.json).
 
 | Versión | Alias | Promovido | Run |
 |---|---|---|---|
-| 1 | — | True | `eae122132fbf472280783e57ce92bfc1` |
-| 2 | — | False | `2bc0f7f899834cf2a4ce707a121c3975` |
-| 3 | champion | True | `501c4c30da674727a9e8b064d8c7d66d` |
+| 1 | — | True | `199d281857a44b90bf309f7a9862f8fa` |
+| 2 | champion | True | `3f151e2d0b6c4d7aa2aaf1de08c96c7b` |
 
 | Run | Rol | Costo validación | Costo baseline | Costo vigente | WAPE | Observaciones | Decisión |
 |---|---|---|---|---|---|---|---|
 | baseline-bootstrap | referencia | 80,167 | — | — | 0.215 | 0 | — |
 | hgb_poisson-bootstrap | retador | 64,841 | 80,167 | — | 0.175 | 0 | Sin modelo vigente; costo en validación 64 841 vs 80 167 del baseline (−19.1 %): promovido |
-| baseline-7387a3fc05404976b06fd05aee37bb2c | referencia | — | — | — | — | 0 | — |
-| hgb_poisson-7387a3fc05404976b06fd05aee37bb2c | retador | — | — | — | — | 0 | Solo 0 días evaluables después del corte del vigente (mínimo 7): se conserva el vigente |
-| baseline-518816a0ce144b1ea91fa2c278ee6a81 | referencia | 66,072 | — | — | 0.205 | 1680 | — |
-| hgb_poisson-518816a0ce144b1ea91fa2c278ee6a81 | retador | 46,296 | 66,072 | 47,167 | 0.187 | 1680 | Costo en validación 46 296 vs 47 167 del vigente (−1.8 %, gana 1/2 ventanas): promovido |
+| baseline-2567920de8fa41f4b7fdf9041581d018 | referencia | 66,072 | — | — | 0.205 | 1680 | — |
+| hgb_poisson-2567920de8fa41f4b7fdf9041581d018 | retador | 46,296 | 66,072 | 47,167 | 0.187 | 1680 | Costo en validación 46 296 vs 47 167 del vigente (−1.8 %, gana 1/2 ventanas): promovido |
 
 ## 6. Airflow: ejecuciones del DAG `reentrenamiento`
 
@@ -386,10 +383,10 @@ Detalle en [`airflow/dag_runs.json`](airflow/dag_runs.json).
 
 | Ejecución | Estado | Tareas |
 |---|---|---|
-| `7387a3fc05404976b06fd05aee37bb2c` | success | verificar (success, 3 s) → entrenar (success, 17 s) → promover (success, 0 s) → confirmar (success, 1 s) → fin (success, 0 s) → cerrar (success, 0 s) |
-| `518816a0ce144b1ea91fa2c278ee6a81` | success | verificar (success, 1 s) → entrenar (success, 32 s) → promover (success, 1 s) → confirmar (success, 1 s) → fin (success, 0 s) → cerrar (success, 0 s) |
+| `f0d9efebe14a46e0a889d179e342846f` | success | verificar (success, 4 s) → entrenar (success, 3 s) → promover (success, 0 s) → confirmar (success, 1 s) → fin (success, 0 s) → cerrar (success, 0 s) |
+| `2567920de8fa41f4b7fdf9041581d018` | success | verificar (success, 1 s) → entrenar (success, 172 s) → promover (success, 2 s) → confirmar (success, 1 s) → fin (success, 0 s) → cerrar (success, 0 s) |
 
 ## Resumen
 
 - 36 casos de API, 0 con diferencias; problemas de contrato en toda la corrida: 0.
-- Códigos: {"estado_reentreno 200": 23, "health 200": 18, "health 503": 16, "modelo 200": 19, "observaciones 200": 147, "observaciones 422": 1, "prediccion 200": 162, "prediccion 422": 7, "reentrenar 202": 2, "reentrenar 503": 1}
+- Códigos: {"estado_reentreno 200": 29, "health 200": 20, "health 503": 109, "modelo 200": 11, "observaciones 200": 147, "observaciones 422": 1, "prediccion 200": 162, "prediccion 422": 7, "reentrenar 202": 2, "reentrenar 503": 1}

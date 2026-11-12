@@ -1,6 +1,6 @@
 {
   "configuracion": {
-    "proyecto": "novamercado-sim3",
+    "proyecto": "novamercado-sim-neg",
     "levantar": true,
     "corte": "2026-01-14",
     "inicio": "2026-01-15",
@@ -14,7 +14,7 @@
     "prob_repetida": 0.1,
     "semilla": 7
   },
-  "duracion_s": 609.0,
+  "duracion_s": 286.0,
   "dias_simulados": 45,
   "filas_predichas": 5400,
   "costo": {
@@ -96,21 +96,21 @@
   },
   "versiones_usadas": {
     "1": 3360,
-    "5": 1680,
-    "7": 360
+    "2": 1680,
+    "3": 360
   },
   "reentrenos": [
     {
       "despues_de": "2026-01-21",
-      "segundos": 78.7,
+      "segundos": 12.2,
       "estado": "exitoso",
       "promovido": false,
       "version": "1",
-      "motivo": "Costo en validación 20 540 vs 20 513 del vigente (+0.1 %, gana 0/1 ventanas): se conserva el vigente (mejora menor a 0.5 %; gana menos de la mitad de las ventanas)"
+      "motivo": "Solo 7 días evaluables después del corte del vigente (mínimo 14): se conserva el vigente sin entrenar"
     },
     {
       "despues_de": "2026-01-28",
-      "segundos": 99.8,
+      "segundos": 45.5,
       "estado": "exitoso",
       "promovido": false,
       "version": "1",
@@ -118,7 +118,7 @@
     },
     {
       "despues_de": "2026-02-04",
-      "segundos": 112.0,
+      "segundos": 54.5,
       "estado": "exitoso",
       "promovido": false,
       "version": "1",
@@ -126,27 +126,27 @@
     },
     {
       "despues_de": "2026-02-11",
-      "segundos": 115.0,
+      "segundos": 57.5,
       "estado": "exitoso",
       "promovido": true,
-      "version": "5",
+      "version": "2",
       "motivo": "Costo en validación 68 526 vs 69 363 del vigente (−1.2 %, gana 2/3 ventanas): promovido",
-      "segundos_hasta_en_uso": 8.1
+      "segundos_hasta_en_uso": 0.0
     },
     {
       "despues_de": "2026-02-18",
-      "segundos": 33.3,
+      "segundos": 9.1,
       "estado": "exitoso",
       "promovido": false,
-      "version": "5",
-      "motivo": "Costo en validación 19 610 vs 19 225 del vigente (+2.0 %, gana 0/1 ventanas): se conserva el vigente (mejora menor a 0.5 %; gana menos de la mitad de las ventanas)"
+      "version": "2",
+      "motivo": "Solo 7 días evaluables después del corte del vigente (mínimo 14): se conserva el vigente sin entrenar"
     },
     {
       "despues_de": "2026-02-25",
-      "segundos": 45.4,
+      "segundos": 48.5,
       "estado": "exitoso",
       "promovido": true,
-      "version": "7",
+      "version": "3",
       "motivo": "Costo en validación 36 461 vs 37 734 del vigente (−3.4 %, gana 1/2 ventanas): promovido",
       "segundos_hasta_en_uso": 8.1
     }
@@ -154,7 +154,7 @@
   "eventos": [
     {
       "tipo": "arranque",
-      "segundos": 135.6,
+      "segundos": 69.8,
       "modelo": {
         "nombre": "novamercado",
         "alias": "champion",
@@ -168,10 +168,10 @@
     }
   ],
   "codigos_http": {
-    "estado_reentreno 200": 166,
+    "estado_reentreno 200": 81,
     "health 200": 1,
-    "health 503": 39,
-    "modelo 200": 23,
+    "health 503": 17,
+    "modelo 200": 18,
     "observaciones 200": 532,
     "prediccion 200": 692,
     "prediccion 422": 77,
@@ -249,34 +249,34 @@
   "fallas": [],
   "latencias": {
     "health": {
-      "n": 40,
+      "n": 18,
       "p50_ms": 3.7,
-      "p95_ms": 6.8
+      "p95_ms": 7.8
     },
     "modelo": {
-      "n": 23,
-      "p50_ms": 3.6,
-      "p95_ms": 8.5
+      "n": 18,
+      "p50_ms": 2.2,
+      "p95_ms": 6.9
     },
     "prediccion": {
       "n": 769,
-      "p50_ms": 136.3,
-      "p95_ms": 150.7
+      "p50_ms": 50.1,
+      "p95_ms": 65.5
     },
     "observaciones": {
       "n": 532,
-      "p50_ms": 10.8,
-      "p95_ms": 13.1
+      "p50_ms": 10.3,
+      "p95_ms": 13.0
     },
     "reentrenar": {
       "n": 6,
-      "p50_ms": 31.3,
-      "p95_ms": 48.4
+      "p50_ms": 39.6,
+      "p95_ms": 77.3
     },
     "estado_reentreno": {
-      "n": 166,
-      "p50_ms": 19.1,
-      "p95_ms": 25.6
+      "n": 81,
+      "p50_ms": 19.6,
+      "p95_ms": 32.0
     }
   }
 }

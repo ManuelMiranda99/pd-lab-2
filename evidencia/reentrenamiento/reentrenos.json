@@ -1,6 +1,6 @@
 {
   "arranque": {
-    "segundos_hasta_ok": 65,
+    "segundos_hasta_ok": 348,
     "modelo": {
       "nombre": "novamercado",
       "alias": "champion",
@@ -23,7 +23,7 @@
       "post": {
         "http": 202,
         "respuesta": {
-          "id": "7387a3fc05404976b06fd05aee37bb2c"
+          "id": "f0d9efebe14a46e0a889d179e342846f"
         }
       },
       "modelo_antes": {
@@ -31,12 +31,12 @@
         "alias": "champion",
         "version": "1"
       },
-      "segundos": 24.3,
+      "segundos": 12.5,
       "estado": {
         "estado": "exitoso",
         "promovido": false,
         "version": "1",
-        "motivo": "Solo 0 días evaluables después del corte del vigente (mínimo 7): se conserva el vigente"
+        "motivo": "Solo 0 días evaluables después del corte del vigente (mínimo 14): se conserva el vigente sin entrenar"
       },
       "contrato_ok": true,
       "modelo_despues": {
@@ -50,7 +50,7 @@
       "post": {
         "http": 202,
         "respuesta": {
-          "id": "518816a0ce144b1ea91fa2c278ee6a81"
+          "id": "2567920de8fa41f4b7fdf9041581d018"
         }
       },
       "modelo_antes": {
@@ -58,19 +58,19 @@
         "alias": "champion",
         "version": "1"
       },
-      "segundos": 39.4,
+      "segundos": 70.8,
       "estado": {
         "estado": "exitoso",
         "promovido": true,
-        "version": "3",
+        "version": "2",
         "motivo": "Costo en validación 46 296 vs 47 167 del vigente (−1.8 %, gana 1/2 ventanas): promovido"
       },
       "contrato_ok": true,
-      "segundos_hasta_en_uso": 12.2,
+      "segundos_hasta_en_uso": 4.0,
       "modelo_despues": {
         "nombre": "novamercado",
         "alias": "champion",
-        "version": "3"
+        "version": "2"
       }
     }
   ],
@@ -87,9 +87,9 @@
           "airflow": true,
           "modelo": true
         },
-        "version_modelo": "3"
+        "version_modelo": "2"
       },
-      "segundos": 3.0600903749946156
+      "segundos": 4.055246082993108
     },
     {
       "paso": "POST /v1/prediccion con MLflow caído",
@@ -97,7 +97,7 @@
       "respuesta": {
         "tienda_id": 5,
         "fecha": "2026-03-01",
-        "version_modelo": "3",
+        "version_modelo": "2",
         "predicciones": [
           {
             "familia_id": "abarrotes",
@@ -172,7 +172,7 @@
       "respuesta": {
         "nombre": "novamercado",
         "alias": "champion",
-        "version": "3"
+        "version": "2"
       }
     },
     {
@@ -193,9 +193,9 @@
           "airflow": true,
           "modelo": true
         },
-        "version_modelo": "3"
+        "version_modelo": "2"
       },
-      "segundos": 9.112810083002842
+      "segundos": 10.08754358299484
     }
   ]
 }

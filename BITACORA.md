@@ -393,3 +393,42 @@ Rama `docs/readme-evidencia-entrega`.
   job `smoke` del tag quede en verde).
 - Luego: F8.7 ensayo con `git clone --branch entrega-lab2` en carpeta nueva, F8.9 enlace en el
   GES y F8.10 repaso.
+
+---
+
+## Sesión 2026-11-12 — Fase 8 (retoma)
+**Fase:** 8 — Documentación, evidencia y entrega
+**Estado al cerrar:** _(sesión abierta)_
+**Plan del día:** verificar pendientes de la fase, F8.7, evidencia al día, F8.8, F8.10
+
+Rama `docs/cierre-entrega`.
+
+### Logrado
+- Verificación de la fase: F8.1–F8.6 confirmadas en el repo; auditoría de datos/credenciales vacía;
+  repo público.
+- F8.7 Ensayo final, primero sobre `b9db136` y **repetido sobre `0884e97`** (PR #14, fixes de la
+  evaluación simulada): `git clone` desde GitHub en carpeta nueva, `data/` copiada,
+  `cp .env.example .env` sin editar y `docker compose -p novamercado-ensayo up -d --build`
+  (volúmenes vacíos):
+  - `/health` = `ok` a los **126 s** con build; el bootstrap entrena y registra v1 como `champion`.
+  - Predicción del ejemplo publicado 200 (12 familias, `ok`); observación 12 guardadas y reenvío 0.
+  - E01–E10 publicados: 200 con el estado documentado (corregido/advertencia/ok).
+  - `POST /admin/reentrenar` → 202; `exitoso` sin entrenar en **16 s** ("mínimo 14").
+  - `down` + `up` sin `-v`: `ok` en **30 s**, bootstrap "ya existe v1", datos persistidos.
+  - El stack principal se detuvo con `stop` durante el ensayo (puertos fijos) y volvió a `ok`.
+- Evidencia regenerada con el código de `0884e97` (decía "mínimo 7"): `scripts/evidencia.py`
+  (36/36 casos, 0 problemas de contrato; sin datos nuevos no entrena; con 14 días +25 % promueve
+  v2, −1.8 %), smoke sintético (ok en 100 s) y las dos simulaciones: choque +20 % → −32.5 % vs
+  baseline, choque −20 % → −22.8 % (mismas cifras que citan `DECISIONES.md` §4.4 y
+  `evidencia/README.md`). Proyectos de prueba borrados con sus volúmenes.
+- F8.10 Guía visual de repaso (Archify, 3 páginas, fuera del repo en `.archify/`): arquitectura y
+  camino de una solicitud; modelo, variables y cantidad sugerida; reentreno, criterio, arranque y
+  resiliencia, con preguntas de autoevaluación.
+
+### Verificación
+- pytest: 944 pasan y 41 se omiten sin BD; ruff limpio. CI de `main` (`0884e97`) verde en sus 4 jobs.
+
+### Próxima sesión
+- Mergear el PR de esta rama y crear el tag `entrega-lab2` sobre ese `main`; verificar con
+  `gh api …/git/refs/tags/entrega-lab2` y que el job `smoke` del tag quede verde.
+- F8.9 enlace en el GES (lo hace la persona) y terminar el repaso con la guía.

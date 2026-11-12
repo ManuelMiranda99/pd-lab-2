@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "segundos": 135.7,
+  "segundos": 100.3,
   "pruebas": [
     {
       "prueba": "health ok ≤ 10 min",
@@ -15,7 +15,7 @@
     {
       "prueba": "predicción válida",
       "ok": true,
-      "detalle": "200 en 180 ms, versión '1'"
+      "detalle": "200 en 101 ms, versión '1'"
     },
     {
       "prueba": "E01 tienda 'T0N' → corregido, mismas predicciones",
@@ -70,7 +70,7 @@
     {
       "prueba": "observaciones idempotentes",
       "ok": true,
-      "detalle": "primera 12, reenvío 0"
+      "detalle": "primera 9, reenvío 0"
     },
     {
       "prueba": "id inventado → 404",
@@ -80,32 +80,32 @@
     {
       "prueba": "POST /admin/reentrenar → 202",
       "ok": true,
-      "detalle": "869ab2c5f75441af8117799326423fb8"
+      "detalle": "f3b1fb447abd492f81ff049254d73d21"
     },
     {
       "prueba": "segundo POST con uno en curso → mismo id",
       "ok": true,
-      "detalle": "869ab2c5f75441af8117799326423fb8"
+      "detalle": "f3b1fb447abd492f81ff049254d73d21"
     },
     {
       "prueba": "reentreno termina ≤ 10 min",
       "ok": true,
-      "detalle": "48 s → {\"estado\": \"exitoso\", \"promovido\": false, \"version\": \"1\", \"motivo\": \"Solo 1 días evaluables después del corte del vigente (mínimo 7): se conserva el vigente\"}"
+      "detalle": "12 s → {\"estado\": \"exitoso\", \"promovido\": false, \"version\": \"1\", \"motivo\": \"Solo 0 días evaluables después del corte del vigente (mínimo 14): se conserva el vigente sin entrenar\"}"
     },
     {
       "prueba": "MLflow caído → degradado < 1 min",
       "ok": true,
-      "detalle": "0.0031850840023253113"
+      "detalle": "1.0082980419974774"
     },
     {
       "prueba": "predicción con MLflow caído",
       "ok": true,
-      "detalle": "180 ms"
+      "detalle": "103 ms"
     },
     {
       "prueba": "MLflow de vuelta → ok < 2 min",
       "ok": true,
-      "detalle": "9.10179083299954"
+      "detalle": "9.084914917009883"
     },
     {
       "prueba": "todas las respuestas cumplen el contrato",
@@ -114,9 +114,9 @@
     }
   ],
   "codigos": {
-    "estado_reentreno 200": 17,
+    "estado_reentreno 200": 5,
     "estado_reentreno 404": 1,
-    "health 200": 12,
+    "health 200": 13,
     "health 503": 15,
     "modelo 200": 1,
     "observaciones 200": 2,
